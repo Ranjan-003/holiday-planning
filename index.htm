@@ -1,0 +1,1570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Holiday Planning Template — WFM Scheduling</title>
+<link rel="stylesheet" href="style-guide.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+/* ── App-specific styles ── */
+.holiday-row-card{border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--sp-5);background:var(--surface-card);margin-bottom:var(--sp-4);box-shadow:var(--shadow-sm)}
+.holiday-row-card__header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-4);padding-bottom:var(--sp-3);border-bottom:1px solid var(--border-subtle)}
+.holiday-year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-4)}
+.year-block{background:var(--surface-sunken);border-radius:var(--radius-md);padding:var(--sp-3) var(--sp-4);border:1px solid var(--border-subtle)}
+.year-block__label{font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary);margin-bottom:var(--sp-3)}
+.year-block input{margin-bottom:var(--sp-2)}
+.impact-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:var(--radius-pill);font-size:var(--text-xs);font-weight:var(--weight-semibold);font-family:var(--font-mono)}
+.impact-chip--drop{background:var(--color-teal-50);color:var(--color-teal-700);border:1px solid var(--color-teal-100)}
+.impact-chip--spike{background:var(--color-red-50);color:var(--color-red-700);border:1px solid var(--color-red-100)}
+.impact-chip--flat{background:var(--color-ink-50);color:var(--color-ink-600);border:1px solid var(--color-ink-100)}
+.combo-row-item{display:grid;grid-template-columns:180px 90px 130px 1fr 80px 60px;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-md);border:1px solid var(--border-subtle);margin-bottom:var(--sp-2);background:var(--surface-card);font-size:var(--text-sm);cursor:pointer;transition:border-color var(--transition-fast),background var(--transition-fast);position:relative}
+.combo-row-item:hover{border-color:var(--border-default);background:var(--surface-sunken)}
+.combo-row-item.recommended{border-color:var(--color-teal-500);background:var(--color-teal-50)}
+.combo-row-item.selected{border-color:var(--color-primary-600);background:var(--color-primary-50)}
+.combo-row-item.anomalous{opacity:.5}
+/* FIX 10: Score hover card */
+.score-hover-card{position:absolute;right:0;top:calc(100% + 4px);width:240px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:var(--sp-3);box-shadow:var(--shadow-md);z-index:100;display:none;font-size:var(--text-xs);pointer-events:none}
+.combo-row-item:hover .score-hover-card{display:block}
+.score-hover-card__row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border-subtle)}
+.score-hover-card__row:last-child{border-bottom:none;font-weight:var(--weight-semibold);padding-top:var(--sp-2)}
+.day-volume-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-2)}
+.day-vol-card{background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:var(--sp-3);text-align:center}
+.day-vol-card__day{font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.06em;color:var(--text-tertiary);margin-bottom:var(--sp-1)}
+.day-vol-card__vol{font-size:var(--text-md);font-weight:var(--weight-semibold);font-family:var(--font-mono);color:var(--text-primary)}
+.day-vol-card__pct{font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px}
+.day-vol-card.holiday-day{border-color:var(--color-amber-100);background:var(--color-amber-50)}
+.interval-table{width:100%;font-size:var(--text-xs);border-collapse:collapse}
+.interval-table th,.interval-table td{padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border-subtle);text-align:right}
+.interval-table th{background:var(--surface-sunken);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary)}
+.interval-table td:first-child,.interval-table th:first-child{text-align:left;font-family:var(--font-mono)}
+.gap-positive{color:var(--color-green-600);font-weight:var(--weight-semibold)}
+.gap-amber{color:var(--color-amber-600);font-weight:var(--weight-semibold)}
+.gap-negative{color:var(--color-red-600);font-weight:var(--weight-semibold)}
+.shift-entry-row{display:grid;grid-template-columns:1fr 100px 100px 80px 36px;gap:var(--sp-2);align-items:center;margin-bottom:var(--sp-2)}
+.shift-entry-row input{height:32px;font-size:var(--text-sm)}
+.recommendation-card{border:2px solid var(--color-teal-500);border-radius:var(--radius-lg);padding:var(--sp-5) var(--sp-6);background:var(--color-teal-50)}
+.recommendation-card__label{font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.07em;color:var(--color-teal-600);margin-bottom:var(--sp-2)}
+.recommendation-card__value{font-size:var(--text-xl);font-weight:var(--weight-semibold);color:var(--color-teal-700);margin-bottom:var(--sp-2)}
+.recommendation-card__rationale{font-size:var(--text-sm);color:var(--color-teal-600);line-height:var(--leading-relaxed)}
+.backend-status{display:flex;align-items:center;gap:var(--sp-2);font-size:var(--text-xs)}
+.backend-dot{width:8px;height:8px;border-radius:50%;background:var(--color-red-500)}
+.backend-dot.online{background:var(--color-green-500)}
+/* FIX 8: Channel multi-select */
+.ch-multiselect{display:flex;gap:var(--sp-2);flex-wrap:wrap}
+.ch-toggle{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:var(--radius-pill);border:1.5px solid var(--border-default);cursor:pointer;font-size:var(--text-sm);font-weight:var(--weight-medium);background:var(--surface-card);transition:all var(--transition-fast);user-select:none}
+.ch-toggle.active-voice{border-color:var(--ch-voice);background:var(--ch-voice-bg);color:var(--ch-voice)}
+.ch-toggle.active-chat{border-color:var(--ch-chat);background:var(--ch-chat-bg);color:var(--ch-chat)}
+.ch-toggle.active-email{border-color:var(--ch-email);background:var(--ch-email-bg);color:var(--ch-email)}
+.ch-toggle.active-blended{border-color:var(--ch-blended);background:var(--ch-blended-bg);color:var(--ch-blended)}
+.ch-panel{display:none}.ch-panel.active{display:block}
+.ch-panel-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border-subtle);margin-bottom:var(--sp-4)}
+.ch-panel-tab{padding:var(--sp-2) var(--sp-4);font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--text-tertiary);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;transition:all var(--transition-fast)}
+.ch-panel-tab.active{color:var(--color-primary-600);border-bottom-color:var(--color-primary-500)}
+.overnight-warn{background:var(--color-amber-50);border:1px solid var(--color-amber-100);border-radius:var(--radius-md);padding:var(--sp-3) var(--sp-4);font-size:var(--text-sm);color:var(--color-amber-700);margin-bottom:var(--sp-3)}
+.cap-warn{background:var(--color-red-50);border:1px solid var(--color-red-100);border-radius:var(--radius-md);padding:var(--sp-3) var(--sp-4);font-size:var(--text-sm);color:var(--color-red-700);margin-top:var(--sp-3)}
+/* FIX 11: comparison table */
+.compare-table{width:100%;border-collapse:collapse;font-size:var(--text-xs)}
+.compare-table th,.compare-table td{padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border-subtle);text-align:right}
+.compare-table th{background:var(--surface-sunken);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary)}
+.compare-table td:first-child,.compare-table th:first-child{text-align:left;font-family:var(--font-mono)}
+.compare-better-planned{background:var(--color-teal-50)}
+.compare-better-rec{background:var(--color-primary-50)}
+.compare-equal{background:var(--surface-sunken)}
+</style>
+</head>
+<body>
+<div class="app-shell">
+<header class="app-header">
+  <div class="app-header__logo">
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+      <rect width="28" height="28" rx="7" fill="#3657e8"/>
+      <rect x="6" y="6" width="7" height="7" rx="2" fill="white" opacity=".9"/>
+      <rect x="15" y="6" width="7" height="7" rx="2" fill="white" opacity=".6"/>
+      <rect x="6" y="15" width="7" height="7" rx="2" fill="white" opacity=".6"/>
+      <rect x="15" y="15" width="7" height="7" rx="2" fill="white" opacity=".9"/>
+    </svg>
+    <span class="app-header__wordmark">Holiday Planning Template</span>
+    <span class="app-header__subtitle">WFM Scheduling v1.2</span>
+  </div>
+  <div class="app-header__actions">
+    <div class="backend-status" id="backendStatus">
+      <span class="backend-dot" id="backendDot"></span>
+      <span id="backendLabel">Backend offline (browser mode)</span>
+    </div>
+    <label class="btn btn--secondary btn--sm" style="cursor:pointer">
+      Import data
+      <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importFromFile(this)">
+    </label>
+    <button class="btn btn--secondary btn--sm" onclick="exportData()">Export JSON</button>
+    <button class="btn btn--primary btn--sm" onclick="resetAll()">New plan</button>
+  </div>
+</header>
+
+<main class="app-body">
+<nav class="tab-nav" role="tablist">
+  <button class="tab-nav__item active" onclick="switchTab(0)" role="tab" aria-selected="true">1 — Setup</button>
+  <button class="tab-nav__item" onclick="switchTab(1)" role="tab">2 — Historical analysis</button>
+  <button class="tab-nav__item" onclick="switchTab(2)" role="tab">3 — Combinations</button>
+  <button class="tab-nav__item" onclick="switchTab(3)" role="tab">4 — Recommendation</button>
+  <button class="tab-nav__item" onclick="switchTab(4)" role="tab">5 — Daily breakdown</button>
+  <button class="tab-nav__item" onclick="switchTab(5)" role="tab">6 — HC &amp; coverage</button>
+  <button class="tab-nav__item" onclick="switchTab(6)" role="tab">7 — Shift planner</button>
+  <button class="tab-nav__item" onclick="switchTab(7)" role="tab">8 — Shift recommendation</button>
+</nav>
+
+<!-- ═══ TAB 1: SETUP ═══ -->
+<section class="tab-panel active" id="tab0">
+  <h2 class="sr-only">Setup</h2>
+  <div class="layout-cols">
+    <div>
+      <div class="section-header">
+        <div class="section-header__left"><h2>Holidays</h2><p>Add each holiday. Enter up to 3 years of actual volume.</p></div>
+        <button class="btn btn--primary btn--sm" onclick="addHoliday()">+ Add holiday</button>
+      </div>
+      <div id="holidayList"></div>
+      <div class="empty-state" id="emptyHolidays">
+        <div class="empty-state__icon">📅</div>
+        <div class="empty-state__title">No holidays added yet</div>
+        <div class="empty-state__body">Click "Add holiday" to begin.</div>
+      </div>
+    </div>
+    <div>
+      <!-- Operating Hours -->
+      <div class="card mb-4">
+        <div class="card__header"><span class="card__title">Default operating hours</span></div>
+        <div class="layout-cols">
+          <div class="form-group">
+            <label class="form-label">Opens</label>
+            <input type="time" id="defaultStart" value="08:00" onchange="validateOpHours();invalidateAllCaches()">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Closes</label>
+            <input type="time" id="defaultEnd" value="20:00" onchange="validateOpHours();invalidateAllCaches()">
+          </div>
+        </div>
+        <div id="opHoursError" class="form-error hidden mt-2"></div>
+        <div id="overnightDefaultWarn" class="overnight-warn hidden mt-2">⚠️ Overnight window — intervals will wrap past midnight correctly.</div>
+      </div>
+
+      <!-- Shrinkage -->
+      <div class="card mb-4">
+        <div class="card__header">
+          <span class="card__title">Shrinkage build-up</span>
+          <span class="badge badge--gray" id="totalShrinkageBadge">Total: 0%</span>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">Planned leave %</label>
+          <div class="input-group"><input type="number" id="shrinkPL" value="8" min="0" max="99" oninput="updateShrinkage()"><span class="input-group__addon">%</span></div>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">Unplanned leave %</label>
+          <div class="input-group"><input type="number" id="shrinkUL" value="5" min="0" max="99" oninput="updateShrinkage()"><span class="input-group__addon">%</span></div>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">Training %</label>
+          <div class="input-group"><input type="number" id="shrinkTR" value="3" min="0" max="99" oninput="updateShrinkage()"><span class="input-group__addon">%</span></div>
+        </div>
+        <div id="shrinkageError" class="form-error hidden">Total shrinkage must be below 100%.</div>
+        <div class="alert alert--info mt-3"><small>Formula: 1 − (1−PL)(1−UL)(1−TR). Breaks excluded.</small></div>
+      </div>
+
+      <!-- SL Targets & AHT -->
+      <div class="card mb-4">
+        <div class="card__header"><span class="card__title">Service level targets &amp; AHT</span></div>
+        <div class="form-group mb-3">
+          <label class="form-label">Voice — % answered within (sec) · AHT (sec)</label>
+          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px;gap:var(--sp-2);align-items:center">
+            <input type="number" id="slVoicePct" value="80" min="1" max="100" onchange="validateAHT();invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
+            <input type="number" id="slVoiceSec" value="20" min="1" onchange="invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
+            <input type="number" id="ahtVoice" value="360" min="1" oninput="validateAHT();invalidateAllCaches()">
+          </div>
+        </div>
+        <div class="form-group mb-3">
+          <label class="form-label">Chat — % answered within (sec) · AHT (sec) · Concurrency</label>
+          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px auto 60px;gap:var(--sp-2);align-items:center">
+            <input type="number" id="slChatPct" value="90" min="1" max="100" onchange="invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
+            <input type="number" id="slChatSec" value="30" min="1" onchange="invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
+            <input type="number" id="ahtChat" value="480" min="1" oninput="validateAHT();invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">Conc.</span>
+            <input type="number" id="chatConcurrency" value="2.5" min="1" max="10" step="0.5" onchange="invalidateAllCaches()">
+          </div>
+        </div>
+        <!-- FIX 2: Separate email occupancy from SL% -->
+        <div class="form-group mb-3">
+          <label class="form-label">Email — % responded within (hrs) · AHT (sec) · Occupancy %</label>
+          <div style="display:grid;grid-template-columns:55px auto 55px auto 80px auto 60px;gap:var(--sp-2);align-items:center">
+            <input type="number" id="slEmailPct" value="95" min="1" max="100" onchange="invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
+            <input type="number" id="slEmailHrs" value="4" min="1" onchange="invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
+            <input type="number" id="ahtEmail" value="600" min="1" oninput="validateAHT();invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)">Occ.</span>
+            <input type="number" id="emailOccupancy" value="75" min="1" max="99" onchange="invalidateAllCaches()">
+          </div>
+          <div class="alert alert--info mt-2"><small>Email occupancy is separate from SL%. SL% tracks response time; occupancy targets agent utilisation.</small></div>
+        </div>
+        <div id="ahtError" class="form-error hidden">AHT must be at least 1 second for all channels.</div>
+        <!-- FIX 3: Blended split configuration -->
+        <div class="form-group">
+          <label class="form-label">Blended channel — voice/chat split %</label>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:var(--sp-3);align-items:center">
+            <div>
+              <label style="font-size:10px;color:var(--ch-voice)">Voice %</label>
+              <input type="number" id="blendedVoicePct" value="60" min="0" max="100" oninput="validateBlendedSplit();invalidateAllCaches()">
+            </div>
+            <span class="text-faint" style="font-size:var(--text-sm);text-align:center">+</span>
+            <div>
+              <label style="font-size:10px;color:var(--ch-chat)">Chat %</label>
+              <input type="number" id="blendedChatPct" value="40" min="0" max="100" oninput="validateBlendedSplit();invalidateAllCaches()">
+            </div>
+          </div>
+          <div id="blendedSplitError" class="form-error hidden">Voice % + Chat % must equal 100.</div>
+          <div id="blendedSplitOk" class="alert alert--success mt-2 hidden"><small>Split: <span id="blendedSplitLabel">60% voice · 40% chat</span></small></div>
+        </div>
+      </div>
+
+      <!-- Anomaly threshold -->
+      <div class="card">
+        <div class="card__header"><span class="card__title">Anomaly detection threshold</span></div>
+        <div class="form-group">
+          <label class="form-label">Auto-flag if deviation &gt; N standard deviations</label>
+          <input type="number" id="anomalyThreshold" value="2" min="1" max="5" step="0.5">
+        </div>
+        <div class="alert alert--warning mt-3"><small>Flagged years excluded from combinations by default. Override per holiday on Tab 2.</small></div>
+      </div>
+    </div>
+  </div>
+  <div class="flex justify-end mt-6"><button class="btn btn--primary" onclick="switchTab(1)">Continue to analysis →</button></div>
+</section>
+
+<!-- ═══ TAB 2: HISTORICAL ANALYSIS ═══ -->
+<section class="tab-panel" id="tab1">
+  <h2 class="sr-only">Historical analysis</h2>
+  <div class="section-header">
+    <div class="section-header__left"><h2>Historical analysis</h2><p>Year-on-year volume impact % per holiday. Anomalies auto-flagged; toggle to override.</p></div>
+    <button class="btn btn--secondary btn--sm" onclick="recalcAll()">Recalculate all</button>
+  </div>
+  <div id="historicalAnalysisContent"></div>
+  <div class="flex justify-end mt-6 gap-3">
+    <button class="btn btn--secondary" onclick="switchTab(0)">← Back</button>
+    <button class="btn btn--primary" onclick="switchTab(2)">Continue →</button>
+  </div>
+</section>
+
+<!-- ═══ TAB 3: COMBINATIONS ═══ -->
+<section class="tab-panel" id="tab2">
+  <h2 class="sr-only">Combinations</h2>
+  <div class="section-header">
+    <div class="section-header__left"><h2>Trend combinations</h2><p>Every valid year combination scored and ranked. Hover score for breakdown. Click a row to select.</p></div>
+  </div>
+  <div id="combinationsContent"></div>
+  <div class="flex justify-end mt-6 gap-3">
+    <button class="btn btn--secondary" onclick="switchTab(1)">← Back</button>
+    <button class="btn btn--primary" onclick="switchTab(3)">Continue →</button>
+  </div>
+</section>
+
+<!-- ═══ TAB 4: RECOMMENDATION ═══ -->
+<section class="tab-panel" id="tab3">
+  <h2 class="sr-only">Recommendation</h2>
+  <div class="section-header">
+    <div class="section-header__left"><h2>Recommendation</h2><p>Highest-scoring combination per holiday with rationale. Override if needed.</p></div>
+  </div>
+  <div id="recommendationContent"></div>
+  <div class="flex justify-end mt-6 gap-3">
+    <button class="btn btn--secondary" onclick="switchTab(2)">← Back</button>
+    <button class="btn btn--primary" onclick="switchTab(4)">Continue →</button>
+  </div>
+</section>
+
+<!-- ═══ TAB 5: DAILY BREAKDOWN ═══ -->
+<section class="tab-panel" id="tab4">
+  <h2 class="sr-only">Daily breakdown</h2>
+  <div class="section-header">
+    <div class="section-header__left"><h2>Daily breakdown</h2><p>Weekly forecast distributed to each day. Edit day-of-week split % or use defaults.</p></div>
+  </div>
+  <div id="dailyBreakdownContent"></div>
+  <div class="flex justify-end mt-6 gap-3">
+    <button class="btn btn--secondary" onclick="switchTab(3)">← Back</button>
+    <button class="btn btn--primary" onclick="switchTab(5)">Continue →</button>
+  </div>
+</section>
+
+<!-- ═══ TAB 6: HC & COVERAGE ═══ -->
+<section class="tab-panel" id="tab5">
+  <h2 class="sr-only">HC and coverage</h2>
+  <div class="section-header">
+    <div class="section-header__left"><h2>HC &amp; coverage</h2><p>Net and gross headcount at daily summary and 30-min interval level.</p></div>
+  </div>
+  <div class="card mb-6">
+    <div class="card__header"><span class="card__title">Select holiday &amp; channel</span></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)">
+      <div class="form-group"><label class="form-label">Holiday</label><select id="hcHolidaySelect" onchange="invalidateHCCache();renderHCTab()"></select></div>
+      <div class="form-group"><label class="form-label">Channel</label>
+        <select id="hcChannelSelect" onchange="invalidateHCCache();renderHCTab()">
+          <option value="voice">Voice</option><option value="chat">Chat</option>
+          <option value="email">Email</option><option value="blended">Blended</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div id="hcSummaryMetrics" class="metrics-row mb-6"></div>
+  <div id="hcCapWarn" class="cap-warn hidden">⚠️ One or more intervals hit the 2000-agent cap — volume may exceed operational capacity. Check AHT, volume, and SL targets.</div>
+  <div class="layout-cols">
+    <div>
+      <div class="card mb-4">
+        <div class="card__header"><span class="card__title">Daily summary</span>
+          <span class="t-caption">Net = Erlang requirement · Gross = after shrinkage</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead><tr><th>Day</th><th class="th--right">Volume</th><th class="th--right">Net HC</th><th class="th--right">Gross HC</th></tr></thead>
+            <tbody id="hcDailySummaryBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <div class="card__header">
+          <span class="card__title">30-min interval drill-down</span>
+          <select id="hcDaySelect" onchange="renderHCIntervals()" style="width:auto;height:28px;font-size:var(--text-sm)"></select>
+        </div>
+        <div class="table-wrap" style="max-height:420px;overflow-y:auto">
+          <table class="interval-table">
+            <thead><tr><th>Interval</th><th>Calls/hr</th><th>Net HC</th><th>Gross HC</th></tr></thead>
+            <tbody id="hcIntervalBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="position:relative;height:240px;margin-top:var(--sp-6)">
+    <canvas id="hcChart" role="img" aria-label="Headcount by 30-minute interval"></canvas>
+  </div>
+  <div class="flex justify-end mt-6 gap-3">
+    <button class="btn btn--secondary" onclick="switchTab(4)">← Back</button>
+    <button class="btn btn--primary" onclick="switchTab(6)">Continue →</button>
+  </div>
+</section>
+
+<!-- ═══ TAB 7: SHIFT PLANNER ═══ -->
+<section class="tab-panel" id="tab6">
+  <h2 class="sr-only">Shift planner</h2>
+  <div class="section-header">
+    <div class="section-header__left"><h2>Shift planner</h2><p>Enter planned shifts and evaluate coverage gaps. Comparison against gross HC (bodies required on floor).</p></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)" class="mb-4">
+    <div class="form-group"><label class="form-label">Holiday</label><select id="spHolidaySelect" onchange="populateSPDays()"></select></div>
+    <div class="form-group"><label class="form-label">Day</label><select id="spDaySelect" onchange="recomputeAllChannelCoverage()"></select></div>
+  </div>
+  <div class="card mb-4">
+    <div class="card__header"><span class="card__title">Channels to evaluate</span><span class="t-caption">Select one or more</span></div>
+    <div class="ch-multiselect" id="spChannelPicker"></div>
+  </div>
+  <div class="layout-cols">
+    <div>
+      <div class="card">
+        <div class="card__header">
+          <span class="card__title">Planned shifts</span>
+          <button class="btn btn--secondary btn--sm" onclick="addShiftRow()">+ Add shift</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 90px 90px 70px 36px;gap:var(--sp-2);margin-bottom:var(--sp-2)">
+          <span class="t-label" style="font-size:10px">Shift name</span>
+          <span class="t-label" style="font-size:10px">Start</span>
+          <span class="t-label" style="font-size:10px">End</span>
+          <span class="t-label" style="font-size:10px">Agents</span>
+          <span></span>
+        </div>
+        <div id="shiftEntriesContainer"></div>
+        <button class="btn btn--ghost btn--sm mt-3" onclick="addShiftRow()">+ Add another shift</button>
+      </div>
+    </div>
+    <div>
+      <div class="ch-panel-tabs" id="spChannelPanelTabs"></div>
+      <div id="spChannelPanels"></div>
+      <div id="spNoneSelected" class="empty-state">
+        <div class="empty-state__icon">📋</div>
+        <div class="empty-state__title">No channels selected</div>
+        <div class="empty-state__body">Select at least one channel above.</div>
+      </div>
+    </div>
+  </div>
+  <div id="shiftCoverageMetrics" class="metrics-row mt-6"></div>
+  <div style="position:relative;height:220px;margin-top:var(--sp-4)">
+    <canvas id="shiftCoverageChart" role="img" aria-label="Planned versus required HC by interval"></canvas>
+  </div>
+  <div class="flex justify-end mt-6 gap-3">
+    <button class="btn btn--secondary" onclick="switchTab(5)">← Back</button>
+    <button class="btn btn--primary" onclick="switchTab(7)">Continue →</button>
+  </div>
+</section>
+
+<!-- ═══ TAB 8: SHIFT RECOMMENDATION ═══ -->
+<section class="tab-panel" id="tab7">
+  <h2 class="sr-only">Shift recommendation</h2>
+  <div class="section-header">
+    <div class="section-header__left"><h2>Shift recommendation</h2><p>Suggested starting point per channel — greedy heuristic, not guaranteed optimal. Manual adjustment may improve coverage.</p></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-4)" class="mb-4">
+    <div class="form-group"><label class="form-label">Holiday</label><select id="srHolidaySelect" onchange="populateSRDays()"></select></div>
+    <div class="form-group"><label class="form-label">Day</label><select id="srDaySelect" onchange="renderShiftRecommendation()"></select></div>
+    <div class="form-group">
+      <label class="form-label">Agent pool (gross bodies on roster)</label>
+      <input type="number" id="srAgentPool" value="50" min="1" onchange="renderShiftRecommendation()">
+    </div>
+  </div>
+  <div class="card mb-4">
+    <div class="card__header"><span class="card__title">Channels to optimise</span><span class="t-caption">Pool split equally across channels</span></div>
+    <div class="ch-multiselect" id="srChannelPicker"></div>
+  </div>
+  <div id="shiftRecommendationContent">
+    <div class="empty-state"><div class="empty-state__icon">🗓️</div><div class="empty-state__title">Select a holiday, day and at least one channel</div></div>
+  </div>
+  <div class="flex justify-end mt-6 gap-3">
+    <button class="btn btn--secondary" onclick="switchTab(6)">← Back</button>
+    <button class="btn btn--success" onclick="exportFinalPlan()">Export final plan</button>
+  </div>
+</section>
+</main>
+</div>
+
+<script>
+/* ================================================================
+   CONSTANTS & STATE
+================================================================ */
+const BACKEND_URL='http://localhost:5050';
+const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+const CHANNELS=['voice','chat','email','blended'];
+const DEFAULT_DOW_SPLIT=[14.3,14.3,14.3,14.3,14.3,14.3,14.2];
+
+let APP={
+  holidays:[],
+  config:{
+    defaultStart:'08:00',defaultEnd:'20:00',
+    shrink:{pl:8,ul:5,tr:3,total:15.46},
+    sl:{voicePct:80,voiceSec:20,chatPct:90,chatSec:30,emailPct:95,emailHrs:4},
+    aht:{voice:360,chat:480,email:600},
+    concurrency:2.5,
+    emailOccupancy:75,         // FIX 2
+    blendedVoicePct:60,        // FIX 3
+    blendedChatPct:40,         // FIX 3
+    anomalyThreshold:2
+  },
+  backendOnline:false
+};
+let hcCache={};
+let shiftEntries=[];
+let spSelectedChannels=new Set(['voice']);
+let srSelectedChannels=new Set(['voice']);
+let hcChartInst=null;
+let shiftChartInst=null;
+let spActivePanelCh='voice';
+
+/* ================================================================
+   FIX 6: LOG-SPACE ERLANG C
+================================================================ */
+function logFactorial(n){
+  if(n<=1)return 0;
+  if(n<=20){let r=0;for(let i=2;i<=n;i++)r+=Math.log(i);return r;}
+  return n*Math.log(n)-n+0.5*Math.log(2*Math.PI*n)+1/(12*n);
+}
+function erlangC(agents,intensity){
+  if(agents<=0||intensity<=0)return 1;
+  if(intensity>=agents)return 1;
+  const rho=intensity/agents;
+  const logNum=agents*Math.log(intensity)-logFactorial(agents)+Math.log(agents/(agents-intensity));
+  const logTerms=[];
+  for(let k=0;k<agents;k++)logTerms.push(k*Math.log(Math.max(intensity,1e-10))-logFactorial(k));
+  const maxLog=Math.max(logNum,...logTerms);
+  const ecNum=Math.exp(logNum-maxLog);
+  const ecDen=ecNum+(1-rho)*logTerms.reduce((a,t)=>a+Math.exp(t-maxLog),0);
+  return ecDen>0?Math.min(1,Math.max(0,ecNum/ecDen)):1;
+}
+function slAtAgents(agents,cph,aht,slSec){
+  if(cph<=0)return 1;
+  const intensity=(cph/3600)*aht;
+  const ec=erlangC(agents,intensity);
+  if(agents<=intensity)return 0;
+  return Math.max(0,Math.min(1,1-ec*Math.exp(-(agents-intensity)*(3600/aht)*slSec/3600)));
+}
+function agentsForSL(cph,aht,slPct,slSec){
+  if(cph<=0||aht<=0)return 0;                             // FIX 4: guard AHT=0
+  const intensity=(cph/3600)*aht;
+  const min=Math.max(1,Math.ceil(intensity)+1);
+  const target=slPct/100;
+  for(let n=min;n<=2000;n++){if(slAtAgents(n,cph,aht,slSec)>=target)return n;}
+  return 2000; // cap — flagged in UI
+}
+
+/* ================================================================
+   TIME UTILITIES — overnight-aware
+================================================================ */
+function toMinutes(t){if(!t||!t.includes(':'))return 0;const[h,m]=t.split(':').map(Number);return h*60+m;}
+function minutesToTime(m){const w=((m%1440)+1440)%1440;return`${String(Math.floor(w/60)).padStart(2,'0')}:${String(w%60).padStart(2,'0')}`;}
+function addHours(t,h){return minutesToTime(toMinutes(t)+h*60);}
+function isOvernightWindow(s,e){return toMinutes(e)<=toMinutes(s);}
+function windowDurationHours(s,e){
+  const sm=toMinutes(s),em=toMinutes(e);
+  if(sm===em)return 0;                                     // FIX 6: same-time guard returns 0
+  return((em>sm?em:em+1440)-sm)/60;
+}
+
+/* ================================================================
+   FIX 6: Same-time operating hours validation
+================================================================ */
+function validateOpHours(){
+  const s=document.getElementById('defaultStart').value;
+  const e=document.getElementById('defaultEnd').value;
+  const errEl=document.getElementById('opHoursError');
+  const warnEl=document.getElementById('overnightDefaultWarn');
+  if(s&&e&&s===e){
+    errEl.textContent='Start and end time are the same. For a 24-hour operation, use 00:00 – 23:59.';
+    errEl.classList.remove('hidden');
+    warnEl.classList.add('hidden');
+  } else {
+    errEl.classList.add('hidden');
+    if(s&&e)warnEl.classList.toggle('hidden',!isOvernightWindow(s,e));
+  }
+  APP.config.defaultStart=s;APP.config.defaultEnd=e;
+}
+
+/* ================================================================
+   FIX 2 & 3: Blended split & AHT validation
+================================================================ */
+function validateBlendedSplit(){
+  const v=+document.getElementById('blendedVoicePct').value||0;
+  const c=+document.getElementById('blendedChatPct').value||0;
+  const errEl=document.getElementById('blendedSplitError');
+  const okEl=document.getElementById('blendedSplitOk');
+  if(Math.abs(v+c-100)>0.01){errEl.classList.remove('hidden');okEl.classList.add('hidden');}
+  else{errEl.classList.add('hidden');okEl.classList.remove('hidden');document.getElementById('blendedSplitLabel').textContent=`${v}% voice · ${c}% chat`;}
+  APP.config.blendedVoicePct=v;APP.config.blendedChatPct=c;
+}
+function validateAHT(){
+  const v=+document.getElementById('ahtVoice').value;
+  const c=+document.getElementById('ahtChat').value;
+  const e=+document.getElementById('ahtEmail').value;
+  const errEl=document.getElementById('ahtError');
+  if(v<1||c<1||e<1){errEl.classList.remove('hidden');}
+  else{errEl.classList.add('hidden');}
+  APP.config.aht={voice:Math.max(1,v),chat:Math.max(1,c),email:Math.max(1,e)};
+}
+
+/* ================================================================
+   VOLUME DISTRIBUTION — overnight-aware
+================================================================ */
+function distributeVolume(dailyVol,startTime,endTime,intervalMins=30){
+  if(!dailyVol||dailyVol<=0)return[];
+  const startMin=toMinutes(startTime);
+  const endMin=toMinutes(endTime);
+  const dur=windowDurationHours(startTime,endTime)*60;
+  const n=Math.floor(dur/intervalMins);
+  if(n<=0)return[];
+  const weights=Array.from({length:n},(_,i)=>{
+    const x=i/Math.max(n-1,1);
+    return Math.exp(-Math.pow(x-0.45,2)/(2*0.18*0.18));
+  });
+  const sum=weights.reduce((a,b)=>a+b,0);
+  return weights.map((w,i)=>({
+    interval:i+1,
+    start:minutesToTime(startMin+i*intervalMins),
+    end:minutesToTime(startMin+(i+1)*intervalMins),
+    volume:dailyVol*w/sum,
+    callsPerHour:(dailyVol*w/sum)*(60/intervalMins)
+  }));
+}
+
+/* ================================================================
+   HC COMPUTATION — FIX 2 & 3 applied
+================================================================ */
+function computeNetHC(cph,channel,opStart,opEnd){
+  const cfg=APP.config;
+  if(channel==='voice')return agentsForSL(cph,cfg.aht.voice,cfg.sl.voicePct,cfg.sl.voiceSec);
+  if(channel==='chat'){
+    const load=(cph/3600)*cfg.aht.chat;
+    return Math.max(1,Math.ceil(load/cfg.concurrency));
+  }
+  if(channel==='email'){
+    const opH=windowDurationHours(opStart||cfg.defaultStart,opEnd||cfg.defaultEnd);
+    if(opH<=0)return 0;
+    // FIX 2: use emailOccupancy, not slEmailPct
+    const throughput=(opH*3600*(cfg.emailOccupancy/100))/cfg.aht.email;
+    return throughput>0?Math.max(1,Math.ceil(cph/throughput)):1;
+  }
+  // FIX 3: use configurable blended split
+  const vPct=cfg.blendedVoicePct/100;
+  const cPct=cfg.blendedChatPct/100;
+  const vNet=agentsForSL(cph*vPct,cfg.aht.voice,cfg.sl.voicePct,cfg.sl.voiceSec);
+  const cNet=Math.max(1,Math.ceil(((cph*cPct/3600)*cfg.aht.chat)/cfg.concurrency));
+  return Math.max(1,vNet+cNet);
+}
+function grossHC(net,shrinkPct){if(shrinkPct>=100)return Infinity;return Math.ceil(net/(1-shrinkPct/100));}
+function computeIntervals(dailyVol,channel,opStart,opEnd){
+  const intervals=distributeVolume(dailyVol,opStart,opEnd,30);
+  const shrink=APP.config.shrink.total;
+  let hitCap=false;
+  const result=intervals.map(iv=>{
+    const net=computeNetHC(iv.callsPerHour,channel,opStart,opEnd);
+    if(net>=2000)hitCap=true;
+    return{...iv,netHC:net,grossHC:grossHC(net,shrink)};
+  });
+  return{intervals:result,hitCap};
+}
+
+/* ================================================================
+   CACHE INVALIDATION
+================================================================ */
+function invalidateAllCaches(){
+  hcCache={};
+  const cfg=APP.config;
+  cfg.defaultStart=document.getElementById('defaultStart').value;
+  cfg.defaultEnd=document.getElementById('defaultEnd').value;
+  cfg.sl.voicePct=+document.getElementById('slVoicePct').value;
+  cfg.sl.voiceSec=+document.getElementById('slVoiceSec').value;
+  cfg.sl.chatPct=+document.getElementById('slChatPct').value;
+  cfg.sl.chatSec=+document.getElementById('slChatSec').value;
+  cfg.sl.emailPct=+document.getElementById('slEmailPct').value;
+  cfg.sl.emailHrs=+document.getElementById('slEmailHrs').value;
+  cfg.aht.voice=Math.max(1,+document.getElementById('ahtVoice').value||360);
+  cfg.aht.chat=Math.max(1,+document.getElementById('ahtChat').value||480);
+  cfg.aht.email=Math.max(1,+document.getElementById('ahtEmail').value||600);
+  cfg.concurrency=+document.getElementById('chatConcurrency').value||2.5;
+  cfg.emailOccupancy=+document.getElementById('emailOccupancy').value||75;
+  cfg.blendedVoicePct=+document.getElementById('blendedVoicePct').value||60;
+  cfg.blendedChatPct=+document.getElementById('blendedChatPct').value||40;
+}
+function invalidateHCCache(){hcCache={};}
+function invalidateCombinationCache(hid){const h=APP.holidays.find(x=>x.id===hid);if(h){h.combinations={};}}
+
+/* ================================================================
+   SHRINKAGE
+================================================================ */
+function compoundShrinkage(pl,ul,tr){return(1-(1-pl/100)*(1-ul/100)*(1-tr/100))*100;}
+function updateShrinkage(){
+  const pl=Math.min(99,Math.max(0,+document.getElementById('shrinkPL').value||0));
+  const ul=Math.min(99,Math.max(0,+document.getElementById('shrinkUL').value||0));
+  const tr=Math.min(99,Math.max(0,+document.getElementById('shrinkTR').value||0));
+  const total=compoundShrinkage(pl,ul,tr);
+  const errEl=document.getElementById('shrinkageError');
+  if(total>=100){errEl.classList.remove('hidden');return;}
+  errEl.classList.add('hidden');
+  APP.config.shrink={pl,ul,tr,total};
+  document.getElementById('totalShrinkageBadge').textContent=`Total: ${total.toFixed(1)}%`;
+  invalidateAllCaches();
+}
+
+/* ================================================================
+   ID-BASED SETTER
+================================================================ */
+function setHVal(hid,path,value){
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  const keys=path.split('.');
+  let obj=h;
+  for(let i=0;i<keys.length-1;i++){if(obj[keys[i]]===undefined)obj[keys[i]]={};obj=obj[keys[i]];}
+  obj[keys[keys.length-1]]=value;
+  invalidateAllCaches();invalidateCombinationCache(hid);
+}
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+/* ================================================================
+   HOLIDAY MODEL
+================================================================ */
+function newHoliday(id){
+  return{id,name:'',date:'',channels:['voice'],planSource:'WFM Forecast',
+    planVolume:{voice:0,chat:0,email:0,blended:0},
+    operatingHoursOverride:false,operatingHours:{start:'08:00',end:'20:00'},
+    years:{Y1:{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}},
+           Y2:{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}},
+           Y3:{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}}},
+    autoAnomalyFlags:{},manualAnomalyOverrides:{},
+    dowSplit:{voice:[...DEFAULT_DOW_SPLIT],chat:[...DEFAULT_DOW_SPLIT],email:[...DEFAULT_DOW_SPLIT],blended:[...DEFAULT_DOW_SPLIT]},
+    selectedCombos:{},combinations:{}};
+}
+
+/* ================================================================
+   RENDER HOLIDAY LIST — FIX 13: overnight warning on cards
+================================================================ */
+function renderHolidayList(){
+  const list=document.getElementById('holidayList');
+  const empty=document.getElementById('emptyHolidays');
+  if(!APP.holidays.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=APP.holidays.map((h,idx)=>{
+    const effectiveStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
+    const effectiveEnd=h.operatingHoursOverride?h.operatingHours.end:APP.config.defaultEnd;
+    const isOvernight=isOvernightWindow(effectiveStart,effectiveEnd);
+    const isSameTime=effectiveStart===effectiveEnd;
+    return`<div class="holiday-row-card">
+      <div class="holiday-row-card__header">
+        <div class="flex items-center gap-3">
+          <span class="badge badge--blue">#${idx+1}</span>
+          <input type="text" value="${escHtml(h.name)}" placeholder="Holiday name"
+            style="border:none;background:none;font-size:var(--text-md);font-weight:var(--weight-semibold);padding:0;width:220px"
+            oninput="setHVal('${h.id}','name',this.value)">
+          <input type="date" value="${h.date}" style="height:28px;width:150px;font-size:var(--text-sm)"
+            onchange="setHVal('${h.id}','date',this.value)">
+        </div>
+        <button class="btn btn--danger btn--sm" onclick="removeHoliday('${h.id}')">Remove</button>
+      </div>
+      <div class="form-group mb-4">
+        <label class="form-label">Channels</label>
+        <div class="flex gap-3">${CHANNELS.map(ch=>`
+          <label class="checkbox-group">
+            <input type="checkbox" ${h.channels.includes(ch)?'checked':''}
+              onchange="toggleChannel('${h.id}','${ch}',this.checked)">
+            <span class="badge badge--${ch}" style="cursor:pointer">${ch}</span>
+          </label>`).join('')}</div>
+      </div>
+      <div class="form-group mb-4">
+        <label class="form-label">Plan volume (weekly) &amp; source</label>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr) 180px;gap:var(--sp-2)">
+          ${CHANNELS.map(ch=>`<div>
+            <label style="font-size:10px;color:var(--text-tertiary)">${ch}</label>
+            <input type="number" value="${h.planVolume[ch]||0}" min="0"
+              oninput="setHVal('${h.id}','planVolume.${ch}',+this.value)">
+          </div>`).join('')}
+          <div><label style="font-size:10px;color:var(--text-tertiary)">Source</label>
+            <select onchange="setHVal('${h.id}','planSource',this.value)" style="height:36px">
+              <option ${h.planSource==='WFM Forecast'?'selected':''}>WFM Forecast</option>
+              <option ${h.planSource==='Finance Target'?'selected':''}>Finance Target</option>
+            </select>
+          </div>
+        </div>
+        ${CHANNELS.filter(ch=>h.channels.includes(ch)&&!(h.planVolume[ch]>0)).map(ch=>`
+          <div class="alert alert--warning mt-2"><small>⚠️ Plan volume for <strong>${ch}</strong> is 0 — HC will show as 0.</small></div>`).join('')}
+      </div>
+      <div class="form-group mb-4">
+        <div class="flex items-center gap-3">
+          <label class="form-label">Operating hours</label>
+          <label class="toggle">
+            <input type="checkbox" class="toggle__input" ${h.operatingHoursOverride?'checked':''}
+              onchange="setHVal('${h.id}','operatingHoursOverride',this.checked);renderHolidayList()">
+            <span class="toggle__track"><span class="toggle__thumb"></span></span>
+            <span style="font-size:var(--text-xs);color:var(--text-secondary)">Override</span>
+          </label>
+        </div>
+        ${h.operatingHoursOverride?`
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-3)">
+            <div><label class="form-label" style="font-size:10px">Opens</label>
+              <input type="time" value="${h.operatingHours.start}" onchange="setHVal('${h.id}','operatingHours.start',this.value)"></div>
+            <div><label class="form-label" style="font-size:10px">Closes</label>
+              <input type="time" value="${h.operatingHours.end}" onchange="setHVal('${h.id}','operatingHours.end',this.value)"></div>
+          </div>`:`<p class="t-caption">Using default: ${APP.config.defaultStart} – ${APP.config.defaultEnd}</p>`}
+        ${isSameTime?`<div class="overnight-warn mt-2">⚠️ Start and end time are identical — check operating hours.</div>`:
+          isOvernight?`<div class="overnight-warn mt-2">⚠️ Overnight window (${effectiveStart}–${effectiveEnd}) — intervals will wrap past midnight correctly.</div>`:''}
+      </div>
+      <label class="form-label mb-3">Historical data (weekly volume)</label>
+      <div class="holiday-year-grid">
+        ${['Y1','Y2','Y3'].map(y=>`<div class="year-block">
+          <div class="year-block__label">${y}</div>
+          <input type="number" placeholder="Calendar year" value="${h.years[y].year}"
+            oninput="setHVal('${h.id}','years.${y}.year',this.value)">
+          <label style="font-size:10px;color:var(--text-tertiary)">Actual volume</label>
+          ${CHANNELS.map(ch=>`<div style="margin-bottom:4px">
+            <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
+            <input type="number" value="${h.years[y].actual[ch]||0}"
+              oninput="setHVal('${h.id}','years.${y}.actual.${ch}',+this.value)">
+          </div>`).join('')}
+          <label style="font-size:10px;color:var(--text-tertiary);margin-top:4px;display:block">Baseline volume</label>
+          ${CHANNELS.map(ch=>`<div style="margin-bottom:4px">
+            <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
+            <input type="number" value="${h.years[y].baseline[ch]||0}"
+              oninput="setHVal('${h.id}','years.${y}.baseline.${ch}',+this.value)">
+          </div>`).join('')}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function addHoliday(){APP.holidays.push(newHoliday('h'+Date.now()));renderHolidayList();}
+function removeHoliday(hid){APP.holidays=APP.holidays.filter(x=>x.id!==hid);delete hcCache[hid];renderHolidayList();}
+function toggleChannel(hid,ch,checked){
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  if(checked&&!h.channels.includes(ch))h.channels.push(ch);
+  if(!checked)h.channels=h.channels.filter(x=>x!==ch);
+  invalidateCombinationCache(hid);
+}
+
+/* ================================================================
+   ANOMALY DETECTION
+================================================================ */
+function computeImpact(actual,baseline){if(!baseline||baseline===0)return null;return((actual-baseline)/baseline)*100;}
+function detectAnomalies(h){
+  const impacts=[];
+  ['Y1','Y2','Y3'].forEach(y=>{
+    if(h.years[y].year){const base=h.years[y].baseline.voice||0;const act=h.years[y].actual.voice||0;
+      if(base>0){const imp=computeImpact(act,base);if(imp!==null)impacts.push({year:y,impact:imp});}}
+  });
+  if(impacts.length<2)return{};
+  const mean=impacts.reduce((a,b)=>a+b.impact,0)/impacts.length;
+  const std=Math.sqrt(impacts.reduce((a,b)=>a+Math.pow(b.impact-mean,2),0)/impacts.length);
+  const threshold=APP.config.anomalyThreshold;
+  const flags={};
+  impacts.forEach(({year,impact})=>{flags[year]=std>0&&Math.abs(impact-mean)>threshold*std;});
+  return flags;
+}
+
+/* ================================================================
+   FIX 7: ANOMALY OVERRIDE — live badge
+================================================================ */
+function setAnomalyOverride(hid,year,val){
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  if(val==='auto')delete h.manualAnomalyOverrides[year];
+  else h.manualAnomalyOverrides[year]=(val==='anomaly');
+  invalidateCombinationCache(hid);
+  const flagged=val==='auto'?(h.autoAnomalyFlags[year]||false):(val==='anomaly');
+  const el=document.getElementById(`anomaly_badge_${hid}_${year}`);
+  if(el)el.innerHTML=flagged?`<span class="anomaly-flag ${val!=='auto'?'anomaly-flag--manual':'anomaly-flag--auto'}">${val!=='auto'?'Manual':'Auto'}</span>`:'<span class="anomaly-flag anomaly-flag--clean">Clean</span>';
+}
+
+/* ================================================================
+   TAB 2: HISTORICAL ANALYSIS
+================================================================ */
+function renderHistoricalAnalysis(){
+  const el=document.getElementById('historicalAnalysisContent');
+  if(!APP.holidays.length){el.innerHTML='<div class="empty-state"><div class="empty-state__icon">📊</div><div class="empty-state__title">Add holidays on Setup tab first</div></div>';return;}
+  el.innerHTML=APP.holidays.map(h=>{
+    const autoFlags=detectAnomalies(h);h.autoAnomalyFlags=autoFlags;
+    return`<div class="card mb-6">
+      <div class="card__header"><div><div class="card__title">${escHtml(h.name)||'Unnamed'}</div>
+      <div class="card__subtitle">${h.date||'No date'} &nbsp;·&nbsp; <span class="badge badge--${h.planSource==='WFM Forecast'?'blue':'purple'}">${h.planSource}</span></div></div></div>
+      ${CHANNELS.filter(ch=>h.channels.includes(ch)).map(ch=>`
+      <div class="mb-4"><div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
+        <div class="table-wrap"><table class="data-table">
+          <thead><tr><th>Year</th><th class="th--right">Actual</th><th class="th--right">Baseline</th><th class="th--right">Impact %</th><th class="th--center">Anomaly</th><th class="th--center">Override</th></tr></thead>
+          <tbody>${['Y1','Y2','Y3'].filter(y=>h.years[y].year).map(y=>{
+            const act=h.years[y].actual[ch]||0,base=h.years[y].baseline[ch]||0;
+            const imp=computeImpact(act,base);
+            const isManual=h.manualAnomalyOverrides[y];
+            const flagged=isManual!==undefined?isManual:(autoFlags[y]||false);
+            return`<tr>
+              <td><strong>${y}</strong> — ${h.years[y].year}</td>
+              <td class="td--right td--mono">${act.toLocaleString()}</td>
+              <td class="td--right td--mono">${base>0?base.toLocaleString():'<span class="text-danger">0 — set baseline</span>'}</td>
+              <td class="td--right">${imp!==null?`<span class="impact-chip ${imp<0?'impact-chip--drop':imp>0?'impact-chip--spike':'impact-chip--flat'}">${imp>=0?'+':''}${imp.toFixed(1)}%</span>`:'<span class="text-faint">No baseline</span>'}</td>
+              <td class="td--center" id="anomaly_badge_${h.id}_${y}">${flagged?`<span class="anomaly-flag ${isManual!==undefined?'anomaly-flag--manual':'anomaly-flag--auto'}">${isManual!==undefined?'Manual':'Auto'}</span>`:'<span class="anomaly-flag anomaly-flag--clean">Clean</span>'}</td>
+              <td class="td--center"><select style="height:28px;font-size:var(--text-xs);width:100px" onchange="setAnomalyOverride('${h.id}','${y}',this.value)">
+                <option value="auto" ${isManual===undefined?'selected':''}>Auto</option>
+                <option value="anomaly" ${isManual===true?'selected':''}>Flag</option>
+                <option value="clean" ${isManual===false?'selected':''}>Clean</option>
+              </select></td>
+            </tr>`;}).join('')}
+          </tbody>
+        </table></div>
+      </div>`).join('')}
+    </div>`;
+  }).join('');
+}
+function recalcAll(){APP.holidays.forEach(h=>{h.autoAnomalyFlags=detectAnomalies(h);h.combinations={};});renderHistoricalAnalysis();}
+
+/* ================================================================
+   COMBINATION ENGINE — FIX 10: score breakdown for hover card
+================================================================ */
+function generateCombinations(h,ch){
+  const avail=['Y1','Y2','Y3'].filter(y=>h.years[y].year&&(h.years[y].actual[ch]||0)>0&&(h.years[y].baseline[ch]||0)>0);
+  const aFlags={...h.autoAnomalyFlags,...h.manualAnomalyOverrides};
+  const impacts={};avail.forEach(y=>{impacts[y]=computeImpact(h.years[y].actual[ch]||0,h.years[y].baseline[ch]||0);});
+  const planVol=h.planVolume[ch]||0;const combos=[];
+  const mkCombo=(name,yl)=>{
+    const vi=yl.map(y=>impacts[y]).filter(v=>v!==null);if(!vi.length)return null;
+    const blended=vi.reduce((a,b)=>a+b,0)/vi.length;
+    const forecasted=Math.round(planVol*(1+blended/100));
+    const hasAnomaly=yl.some(y=>aFlags[y]);
+    const {score,breakdown}=scoreCombo(yl,vi,aFlags);
+    return{combo:name,years:yl,impacts:vi,blendedImpact:blended,forecasted,hasAnomaly,score,breakdown,selected:false,recommended:false};
+  };
+  avail.forEach(y=>{const c=mkCombo(y,[y]);if(c)combos.push(c);});
+  [['Y1','Y2'],['Y2','Y3'],['Y1','Y3']].forEach(p=>{if(p.every(y=>avail.includes(y))){const c=mkCombo(`Avg(${p.join('+')})`,p);if(c)combos.push(c);}});
+  if(avail.length===3){const c=mkCombo('Avg(Y1+Y2+Y3)',avail);if(c)combos.push(c);}
+  combos.sort((a,b)=>b.score-a.score);if(combos.length)combos[0].recommended=true;
+  return combos;
+}
+
+/* FIX 10: scoreCombo returns breakdown sub-scores */
+function scoreCombo(years,impacts,aFlags){
+  const mean=impacts.reduce((a,b)=>a+b,0)/impacts.length;
+  const std=impacts.length>1?Math.sqrt(impacts.reduce((a,b)=>a+Math.pow(b-mean,2),0)/impacts.length):0;
+  const cv=(mean!==0&&std>0)?std/Math.abs(mean):(std>0?1:0);
+  const consistency=Math.max(0,1-Math.min(cv,1));
+  const richness=Math.min(impacts.length/3,1);
+  const rMap={Y1:0.2,Y2:0.5,Y3:1.0};
+  const recency=years.reduce((a,y)=>a+(rMap[y]||0.5),0)/years.length;
+  const anomalyPenalty=0.3*years.filter(y=>aFlags[y]).length;
+  const raw=0.4*consistency+0.3*richness+0.3*recency-anomalyPenalty;
+  const score=Math.max(0,Math.min(100,raw*100));
+  const breakdown={
+    consistency:Math.round(consistency*40),
+    richness:Math.round(richness*30),
+    recency:Math.round(recency*30),
+    anomalyPenalty:Math.round(anomalyPenalty*100),
+    total:Math.round(score)
+  };
+  return{score,breakdown};
+}
+
+/* FIX 11: single-year rationale guard */
+function buildRationale(combo){
+  const impacts=combo.impacts;
+  const mean=impacts.reduce((a,b)=>a+b,0)/impacts.length;
+  const direction=mean<0?`${Math.abs(mean).toFixed(1)}% volume drop`:`${mean.toFixed(1)}% volume rise`;
+  if(impacts.length===1)return`Single year — trend stability cannot be assessed from one data point.${combo.hasAnomaly?' ⚠️ This year is flagged as anomalous — verify before use.':''} Blended impact: ${direction}.`;
+  const std=Math.sqrt(impacts.reduce((a,b)=>a+Math.pow(b-mean,2),0)/impacts.length);
+  const cv=mean!==0?std/Math.abs(mean):1;
+  let r=impacts.length===3?'Three-year average provides highest data richness. ':'Two-year average balances recency and consistency. ';
+  if(cv<0.15)r+=`Very stable trend (CV ${(cv*100).toFixed(0)}%). `;
+  else if(cv<0.35)r+=`Moderate variation (CV ${(cv*100).toFixed(0)}%). `;
+  else r+=`High variation — use with caution (CV ${(cv*100).toFixed(0)}%). `;
+  if(combo.hasAnomaly)r+='⚠️ Contains a flagged anomaly year — verify before using. ';
+  return r+`Blended impact: ${direction}.`;
+}
+
+/* ================================================================
+   TAB 3: COMBINATIONS — FIX 10: hover score card
+================================================================ */
+function renderCombinations(){
+  const el=document.getElementById('combinationsContent');
+  if(!APP.holidays.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No holidays</div></div>';return;}
+  el.innerHTML=APP.holidays.map(h=>`
+    <div class="card mb-6">
+      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
+      ${h.channels.map(ch=>{
+        const combos=generateCombinations(h,ch);
+        h.combinations[ch]=combos;
+        const prevSel=h.selectedCombos[ch];
+        if(!prevSel||!combos.some(c=>c.combo===prevSel)){if(combos.length)h.selectedCombos[ch]=combos[0].combo;}
+        const selKey=h.selectedCombos[ch];
+        return`<div class="mb-4">
+          <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span>
+            <span class="t-caption">Plan: ${(h.planVolume[ch]||0).toLocaleString()} · ${h.planSource}</span></div>
+          ${!combos.length?'<p class="t-caption text-faint">No valid combinations — check historical data on Tab 2.</p>':`
+          <div style="display:grid;grid-template-columns:180px 90px 130px 1fr 80px 60px;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);margin-bottom:var(--sp-1)">
+            <span class="t-label" style="font-size:10px">Combination</span><span class="t-label" style="font-size:10px;text-align:right">Impact %</span>
+            <span class="t-label" style="font-size:10px;text-align:right">Forecast</span><span class="t-label" style="font-size:10px">Score (hover for breakdown)</span>
+            <span class="t-label" style="font-size:10px;text-align:center">Anomaly</span><span class="t-label" style="font-size:10px;text-align:center">Selected</span>
+          </div>
+          ${combos.map(c=>`
+            <div class="combo-row-item ${c.recommended?'recommended':''} ${c.combo===selKey?'selected':''} ${c.hasAnomaly?'anomalous':''}"
+              onclick="selectCombo('${h.id}','${ch}','${c.combo}')">
+              <span>${c.combo}${c.recommended?' <span class="badge badge--recommended" style="font-size:10px">Recommended</span>':''}</span>
+              <span class="${c.blendedImpact<0?'combo-impact--drop':'combo-impact--spike'}" style="text-align:right;font-family:var(--font-mono);font-size:var(--text-sm)">
+                ${c.blendedImpact>=0?'+':''}${c.blendedImpact.toFixed(1)}%</span>
+              <span style="text-align:right;font-family:var(--font-mono);font-size:var(--text-sm)">${c.forecasted.toLocaleString()}</span>
+              <div style="position:relative">
+                <div class="combo-score-bar"><div class="combo-score-bar__track"><div class="combo-score-bar__fill" style="width:${c.score}%"></div></div>
+                  <span class="combo-score-label">${Math.round(c.score)}</span></div>
+                <!-- FIX 10: score hover card -->
+                <div class="score-hover-card">
+                  <div style="font-weight:500;margin-bottom:6px;font-size:11px">Score breakdown</div>
+                  <div class="score-hover-card__row"><span>Consistency (max 40)</span><span>${c.breakdown.consistency}</span></div>
+                  <div class="score-hover-card__row"><span>Data richness (max 30)</span><span>${c.breakdown.richness}</span></div>
+                  <div class="score-hover-card__row"><span>Recency bias (max 30)</span><span>${c.breakdown.recency}</span></div>
+                  ${c.breakdown.anomalyPenalty?`<div class="score-hover-card__row" style="color:var(--color-red-600)"><span>Anomaly penalty</span><span>−${c.breakdown.anomalyPenalty}</span></div>`:''}
+                  <div class="score-hover-card__row"><span>Total score</span><span>${c.breakdown.total}</span></div>
+                </div>
+              </div>
+              <span style="text-align:center">${c.hasAnomaly?'<span class="anomaly-flag anomaly-flag--auto">Yes</span>':'—'}</span>
+              <span style="text-align:center">${c.combo===selKey?'<span class="badge badge--blue">✓</span>':''}</span>
+            </div>`).join('')}`}
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+function selectCombo(hid,ch,combo){
+  const h=APP.holidays.find(x=>x.id===hid);
+  if(h){h.selectedCombos[ch]=combo;invalidateHCCache();renderCombinations();}
+}
+
+/* ================================================================
+   TAB 4: RECOMMENDATION
+================================================================ */
+function renderRecommendation(){
+  const el=document.getElementById('recommendationContent');
+  if(!APP.holidays.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No holidays</div></div>';return;}
+  el.innerHTML=APP.holidays.map(h=>`
+    <div class="card mb-6">
+      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
+      <div style="display:grid;grid-template-columns:repeat(${h.channels.length},1fr);gap:var(--sp-4)">
+        ${h.channels.map(ch=>{
+          const combos=h.combinations[ch]||generateCombinations(h,ch);
+          const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
+          const rec=combos.find(c=>c.recommended)||combos[0];
+          if(!sel)return`<div class="t-caption">No data for ${ch}</div>`;
+          return`<div>
+            <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
+            <div class="recommendation-card mb-3">
+              <div class="recommendation-card__label">Selected combination</div>
+              <div class="recommendation-card__value">${sel.combo}</div>
+              <div class="flex gap-3 mb-2">
+                <span class="impact-chip ${sel.blendedImpact<0?'impact-chip--drop':'impact-chip--spike'}">${sel.blendedImpact>=0?'+':''}${sel.blendedImpact.toFixed(1)}%</span>
+                <span class="impact-chip impact-chip--flat">${sel.forecasted.toLocaleString()}</span>
+              </div>
+              <div class="recommendation-card__rationale">${buildRationale(sel)}</div>
+            </div>
+            ${sel.combo!==rec?.combo?`<div class="alert alert--warning mb-3"><small>System recommends <strong>${rec.combo}</strong> (score ${Math.round(rec.score)}) — overridden.</small></div>`:''}
+            <div class="form-group"><label class="form-label">Override</label>
+              <select onchange="selectCombo('${h.id}','${ch}',this.value)">
+                ${combos.map(c=>`<option value="${c.combo}" ${c.combo===h.selectedCombos[ch]?'selected':''}>${c.combo} (${c.blendedImpact.toFixed(1)}%)</option>`).join('')}
+              </select>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+/* ================================================================
+   TAB 5: DAILY BREAKDOWN
+================================================================ */
+function renderDailyBreakdown(){
+  const el=document.getElementById('dailyBreakdownContent');
+  if(!APP.holidays.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No data</div></div>';return;}
+  el.innerHTML=APP.holidays.map(h=>`
+    <div class="card mb-6">
+      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
+      <div class="card mb-4" style="background:var(--surface-sunken)">
+        <div class="card__header"><span class="card__title" style="font-size:var(--text-sm)">Day-of-week split %</span>
+          <button class="btn btn--ghost btn--sm" onclick="resetDowSplit('${h.id}')">Reset to flat</button></div>
+        ${h.channels.map(ch=>`<div class="mb-3"><span class="badge badge--${ch} mb-2">${ch}</span>
+          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-2);margin-top:var(--sp-2)">
+            ${DAYS.map((d,di)=>`<div>
+              <label style="font-size:9px;color:var(--text-tertiary);display:block;text-align:center">${d}</label>
+              <input type="number" value="${(h.dowSplit[ch][di]).toFixed(1)}" step="0.1" min="0" max="100"
+                style="height:28px;font-size:var(--text-xs);text-align:center"
+                oninput="setDowSplit('${h.id}','${ch}',${di},+this.value)">
+            </div>`).join('')}
+          </div>
+        </div>`).join('')}
+      </div>
+      ${h.channels.map(ch=>{
+        const combos=h.combinations[ch]||generateCombinations(h,ch);
+        const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
+        if(!sel)return`<p class="t-caption">No forecast for ${ch}</p>`;
+        const wkVol=sel.forecasted;const splits=h.dowSplit[ch];
+        const splitSum=splits.reduce((a,b)=>a+b,0);
+        const eff=splitSum>0?splits.map(s=>s/splitSum*100):splits.map(()=>100/7);
+        return`<div class="mb-4">
+          <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span>
+            <span class="t-caption">Weekly: <strong>${wkVol.toLocaleString()}</strong> · ${sel.combo}</span></div>
+          ${Math.abs(splitSum-100)>0.5&&splitSum>0?`<div class="alert alert--warning mb-2"><small>⚠️ Splits sum to ${splitSum.toFixed(1)}% — normalised automatically.</small></div>`:''}
+          ${wkVol===0?'<div class="alert alert--warning mb-2"><small>⚠️ Forecast is 0 for this channel.</small></div>':''}
+          <div class="day-volume-grid">${DAYS.map((d,di)=>{
+            const vol=Math.round(wkVol*eff[di]/100);
+            const dow=h.date?new Date(h.date).getDay():-1;
+            const isHDay=h.date&&(dow===(di===6?0:di+1));
+            return`<div class="day-vol-card ${isHDay?'holiday-day':''}">
+              <div class="day-vol-card__day">${d}${isHDay?' 🎉':''}</div>
+              <div class="day-vol-card__vol">${vol.toLocaleString()}</div>
+              <div class="day-vol-card__pct">${eff[di].toFixed(1)}%</div>
+            </div>`;
+          }).join('')}</div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+function setDowSplit(hid,ch,di,val){const h=APP.holidays.find(x=>x.id===hid);if(h){h.dowSplit[ch][di]=val;invalidateAllCaches();renderDailyBreakdown();}}
+function resetDowSplit(hid){const h=APP.holidays.find(x=>x.id===hid);if(!h)return;CHANNELS.forEach(ch=>{h.dowSplit[ch]=[...DEFAULT_DOW_SPLIT];});invalidateAllCaches();renderDailyBreakdown();}
+
+/* ================================================================
+   HC DAILY DATA BUILDER
+================================================================ */
+function buildDailyData(h,ch){
+  const key=h.id+'_'+ch;if(hcCache[key])return hcCache[key];
+  const combos=h.combinations[ch]||generateCombinations(h,ch);
+  const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
+  if(!sel)return{days:[],hitCap:false};
+  const wkVol=sel.forecasted||0;const splits=h.dowSplit[ch];
+  const splitSum=splits.reduce((a,b)=>a+b,0);
+  const opStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
+  const opEnd=h.operatingHoursOverride?h.operatingHours.end:APP.config.defaultEnd;
+  let anyCapHit=false;
+  const days=DAYS.map((d,di)=>{
+    const pct=splitSum>0?splits[di]/splitSum*100:100/7;
+    const vol=Math.round(wkVol*pct/100);
+    const{intervals,hitCap}=computeIntervals(vol,ch,opStart,opEnd);
+    if(hitCap)anyCapHit=true;
+    const peakNet=intervals.length?Math.max(...intervals.map(i=>i.netHC)):0;
+    const peakGross=intervals.length?Math.max(...intervals.map(i=>i.grossHC)):0;
+    return{day:d,volume:vol,netHC:peakNet,grossHC:peakGross,intervals,opStart,opEnd};
+  });
+  const result={days,hitCap:anyCapHit};
+  hcCache[key]=result;return result;
+}
+
+/* ================================================================
+   TAB 6: HC & COVERAGE — FIX 4: cap warning
+================================================================ */
+function populateHCSelects(){
+  document.getElementById('hcHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
+}
+function renderHCTab(){
+  if(!APP.holidays.length)return;
+  const hid=document.getElementById('hcHolidaySelect').value;
+  const ch=document.getElementById('hcChannelSelect').value;
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  const{days,hitCap}=buildDailyData(h,ch);
+  document.getElementById('hcCapWarn').classList.toggle('hidden',!hitCap);
+  const daySelect=document.getElementById('hcDaySelect');
+  daySelect.innerHTML=days.map((d,i)=>`<option value="${i}">${d.day} (${d.volume.toLocaleString()})</option>`).join('');
+  const shrink=APP.config.shrink.total;
+  const totalVol=days.reduce((a,d)=>a+d.volume,0);
+  const peakNet=days.length?Math.max(...days.map(d=>d.netHC)):0;
+  const peakGross=days.length?Math.max(...days.map(d=>d.grossHC)):0;
+  document.getElementById('hcSummaryMetrics').innerHTML=`
+    <div class="metric-card metric-card--primary"><div class="metric-card__label">Weekly forecast</div><div class="metric-card__value">${totalVol.toLocaleString()}</div></div>
+    <div class="metric-card"><div class="metric-card__label">Shrinkage</div><div class="metric-card__value">${shrink.toFixed(1)}%</div></div>
+    <div class="metric-card metric-card--warning"><div class="metric-card__label">Peak net HC</div><div class="metric-card__value">${peakNet}</div></div>
+    <div class="metric-card metric-card--danger"><div class="metric-card__label">Peak gross HC</div><div class="metric-card__value">${peakGross}</div></div>`;
+  document.getElementById('hcDailySummaryBody').innerHTML=days.map(d=>`
+    <tr><td>${d.day}</td><td class="td--right td--mono">${d.volume.toLocaleString()}</td>
+    <td class="td--right td--mono">${d.netHC}</td><td class="td--right td--mono">${d.grossHC}</td></tr>`).join('');
+  renderHCIntervals();
+}
+function renderHCIntervals(){
+  const hid=document.getElementById('hcHolidaySelect').value;
+  const ch=document.getElementById('hcChannelSelect').value;
+  const dayIdx=+document.getElementById('hcDaySelect').value||0;
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  const{days}=buildDailyData(h,ch);
+  if(!days||!days[dayIdx]){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">No interval data</td></tr>';return;}
+  const ivs=days[dayIdx].intervals;
+  if(!ivs.length){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">Zero volume — no intervals</td></tr>';return;}
+  document.getElementById('hcIntervalBody').innerHTML=ivs.map(iv=>`
+    <tr><td>${iv.start}–${iv.end}</td><td>${iv.callsPerHour.toFixed(0)}</td><td>${iv.netHC}</td><td>${iv.grossHC}</td></tr>`).join('');
+  if(hcChartInst){hcChartInst.destroy();hcChartInst=null;}
+  hcChartInst=new Chart(document.getElementById('hcChart'),{
+    type:'line',data:{labels:ivs.map(iv=>iv.start),datasets:[
+      {label:'Net HC',data:ivs.map(i=>i.netHC),borderColor:'#3657e8',backgroundColor:'rgba(54,87,232,.08)',tension:.3,pointRadius:2},
+      {label:'Gross HC',data:ivs.map(i=>i.grossHC),borderColor:'#e08010',backgroundColor:'rgba(224,128,16,.08)',tension:.3,pointRadius:2,borderDash:[4,3]}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:true,maxTicksLimit:12}},y:{beginAtZero:true}}}
+  });
+}
+
+/* ================================================================
+   FIX 8: NAMED CHANNEL TOGGLE HANDLERS (no string-based globals)
+================================================================ */
+function toggleSPChannel(ch,checked){
+  if(checked)spSelectedChannels.add(ch);else spSelectedChannels.delete(ch);
+  renderSPChannelPicker();
+  if(!spSelectedChannels.has(spActivePanelCh)){spActivePanelCh=[...spSelectedChannels][0]||'voice';}
+  buildSPPanelTabs();recomputeAllChannelCoverage();
+}
+function toggleSRChannel(ch,checked){
+  if(checked)srSelectedChannels.add(ch);else srSelectedChannels.delete(ch);
+  renderSRChannelPicker();renderShiftRecommendation();
+}
+function renderSPChannelPicker(){
+  const el=document.getElementById('spChannelPicker');if(!el)return;
+  el.innerHTML=CHANNELS.map(ch=>`
+    <label class="ch-toggle ${spSelectedChannels.has(ch)?`active-${ch}`:''}">
+      <input type="checkbox" ${spSelectedChannels.has(ch)?'checked':''} value="${ch}"
+        onchange="toggleSPChannel('${ch}',this.checked)">
+      ${ch.charAt(0).toUpperCase()+ch.slice(1)}
+    </label>`).join('');
+}
+function renderSRChannelPicker(){
+  const el=document.getElementById('srChannelPicker');if(!el)return;
+  el.innerHTML=CHANNELS.map(ch=>`
+    <label class="ch-toggle ${srSelectedChannels.has(ch)?`active-${ch}`:''}">
+      <input type="checkbox" ${srSelectedChannels.has(ch)?'checked':''} value="${ch}"
+        onchange="toggleSRChannel('${ch}',this.checked)">
+      ${ch.charAt(0).toUpperCase()+ch.slice(1)}
+    </label>`).join('');
+}
+
+/* ================================================================
+   TAB 7: SHIFT PLANNER — FIX 7: compare against gross HC
+================================================================ */
+function populateSPSelects(){
+  document.getElementById('spHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
+  populateSPDays();
+}
+function populateSPDays(){
+  document.getElementById('spDaySelect').innerHTML=DAYS.map((d,i)=>`<option value="${i}">${d}</option>`).join('');
+  renderSPChannelPicker();buildSPPanelTabs();recomputeAllChannelCoverage();
+}
+function addShiftRow(name='',start='09:00',end='17:00',agents=10){
+  shiftEntries.push({id:Date.now()+Math.random(),name,start,end,agents});
+  renderShiftRows();recomputeAllChannelCoverage();
+}
+function renderShiftRows(){
+  document.getElementById('shiftEntriesContainer').innerHTML=shiftEntries.map((s,i)=>`
+    <div class="shift-entry-row">
+      <input type="text" value="${escHtml(s.name)}" placeholder="e.g. Early"
+        oninput="shiftEntries[${i}].name=this.value">
+      <input type="time" value="${s.start}" onchange="shiftEntries[${i}].start=this.value;recomputeAllChannelCoverage()">
+      <input type="time" value="${s.end}" onchange="shiftEntries[${i}].end=this.value;recomputeAllChannelCoverage()">
+      <input type="number" value="${s.agents}" min="0" oninput="shiftEntries[${i}].agents=+this.value;recomputeAllChannelCoverage()">
+      <button class="btn btn--danger btn--icon btn--sm" onclick="removeShiftRow(${i})">×</button>
+    </div>`).join('');
+}
+function removeShiftRow(i){shiftEntries.splice(i,1);renderShiftRows();recomputeAllChannelCoverage();}
+function buildSPPanelTabs(){
+  const channels=[...spSelectedChannels];
+  const tabsEl=document.getElementById('spChannelPanelTabs');
+  const panelsEl=document.getElementById('spChannelPanels');
+  const noneEl=document.getElementById('spNoneSelected');
+  if(!channels.length){tabsEl.innerHTML='';panelsEl.innerHTML='';noneEl.style.display='block';return;}
+  noneEl.style.display='none';
+  if(!channels.includes(spActivePanelCh))spActivePanelCh=channels[0];
+  tabsEl.innerHTML=channels.map(ch=>`
+    <button class="ch-panel-tab ${ch===spActivePanelCh?'active':''}"
+      onclick="spActivePanelCh='${ch}';buildSPPanelTabs();recomputeAllChannelCoverage()">${ch.charAt(0).toUpperCase()+ch.slice(1)}</button>`).join('');
+  panelsEl.innerHTML=channels.map(ch=>`
+    <div class="ch-panel ${ch===spActivePanelCh?'active':''}" id="sp_panel_${ch}">
+      <div style="display:flex;gap:var(--sp-3);align-items:center;margin-bottom:var(--sp-3)">
+        <span class="sl-cell sl-green">On target</span><span class="sl-cell sl-amber">&lt;15% under</span><span class="sl-cell sl-red">&gt;15% under</span>
+        <span class="t-caption" style="margin-left:auto">Compared against gross HC (bodies required on floor)</span>
+      </div>
+      <div class="table-wrap" style="max-height:360px;overflow-y:auto">
+        <table class="interval-table">
+          <thead><tr><th>Interval</th><th>Required (gross)</th><th>Planned</th><th>Gap</th><th>Risk</th></tr></thead>
+          <tbody id="spGapBody_${ch}"></tbody>
+        </table>
+      </div>
+    </div>`).join('');
+}
+
+/* FIX 1: OVERNIGHT-SAFE SHIFT-TO-INTERVAL COVERAGE */
+function intervalOverlapsShift(ivStartMin,ivEndMin,shiftStartMin,shiftEndMin){
+  // Normalise both to an absolute 24h+buffer timeline
+  // overnight shift: if shiftEnd < shiftStart, add 1440 to shiftEnd
+  // overnight interval: if ivEnd < ivStart, add 1440 to ivEnd
+  const sEnd=shiftEndMin<shiftStartMin?shiftEndMin+1440:shiftEndMin;
+  const iEnd=ivEndMin<ivStartMin?ivEndMin+1440:ivEndMin;
+  // Four cases: daytime vs daytime, overnight vs daytime, etc.
+  // Test overlap in primary window
+  if(shiftStartMin<iEnd&&sEnd>ivStartMin)return true;
+  // If shift is overnight, also test shifted interval (+1440)
+  if(sEnd>1440&&shiftStartMin<iEnd+1440&&sEnd>ivStartMin+1440)return true;
+  // If interval is overnight, test shifted shift (+1440)
+  if(iEnd>1440&&shiftStartMin+1440<iEnd&&sEnd+1440>ivStartMin)return true;
+  return false;
+}
+
+/* FIX 7: computeShiftCoverage compares against grossHC */
+function computeShiftCoverage(intervals,shifts){
+  return intervals.map(iv=>{
+    const ivS=toMinutes(iv.start),ivE=toMinutes(iv.end);
+    let planned=0;
+    shifts.forEach(s=>{
+      const sS=toMinutes(s.start),sE=toMinutes(s.end);
+      if(intervalOverlapsShift(ivS,ivE,sS,sE))planned+=(+s.agents||0);
+    });
+    const required=iv.grossHC;                              // FIX 7: gross, not net
+    const delta=planned-required;
+    const risk=delta>=0?'green':(delta>=-Math.ceil(required*0.15)?'amber':'red');
+    return{...iv,planned,required,delta,risk};
+  });
+}
+
+function recomputeAllChannelCoverage(){
+  const hid=document.getElementById('spHolidaySelect')?.value;
+  const dayIdx=+(document.getElementById('spDaySelect')?.value||0);
+  const h=hid&&APP.holidays.find(x=>x.id===hid);
+  if(!h)return;
+  const channels=[...spSelectedChannels];
+  if(!channels.length){document.getElementById('shiftCoverageMetrics').innerHTML='';return;}
+  let totalGreen=0,totalAmber=0,totalRed=0,totalIvs=0;
+  channels.forEach(ch=>{
+    const{days}=buildDailyData(h,ch);
+    if(!days||!days[dayIdx])return;
+    const coverage=computeShiftCoverage(days[dayIdx].intervals,shiftEntries);
+    const bodyEl=document.getElementById(`spGapBody_${ch}`);
+    if(bodyEl)bodyEl.innerHTML=coverage.map(c=>`
+      <tr><td>${c.start}–${c.end}</td><td>${c.required}</td><td>${c.planned}</td>
+      <td class="${c.delta>=0?'gap-positive':c.delta>=-2?'gap-amber':'gap-negative'}">${c.delta>=0?'+':''}${c.delta}</td>
+      <td><span class="sl-cell sl-${c.risk}">${c.risk==='green'?'On target':c.risk==='amber'?'Amber':'At risk'}</span></td></tr>`).join('');
+    totalGreen+=coverage.filter(c=>c.risk==='green').length;
+    totalAmber+=coverage.filter(c=>c.risk==='amber').length;
+    totalRed+=coverage.filter(c=>c.risk==='red').length;
+    totalIvs+=coverage.length;
+  });
+  const totalPlanned=shiftEntries.reduce((a,s)=>a+(+s.agents||0),0);
+  const covPct=totalIvs>0?Math.round(100*totalGreen/totalIvs):0;
+  document.getElementById('shiftCoverageMetrics').innerHTML=`
+    <div class="metric-card metric-card--success"><div class="metric-card__label">Intervals on target</div><div class="metric-card__value">${totalGreen}</div></div>
+    <div class="metric-card metric-card--warning"><div class="metric-card__label">Amber intervals</div><div class="metric-card__value">${totalAmber}</div></div>
+    <div class="metric-card metric-card--danger"><div class="metric-card__label">At-risk intervals</div><div class="metric-card__value">${totalRed}</div></div>
+    <div class="metric-card"><div class="metric-card__label">Total agents</div><div class="metric-card__value">${totalPlanned}</div></div>
+    <div class="metric-card metric-card--primary"><div class="metric-card__label">SL coverage</div><div class="metric-card__value">${covPct}%</div></div>`;
+  renderShiftCoverageChart(h,dayIdx,spActivePanelCh);
+}
+function renderShiftCoverageChart(h,dayIdx,ch){
+  const{days}=buildDailyData(h,ch);
+  if(!days||!days[dayIdx]||!days[dayIdx].intervals.length)return;
+  const coverage=computeShiftCoverage(days[dayIdx].intervals,shiftEntries);
+  if(shiftChartInst){shiftChartInst.destroy();shiftChartInst=null;}
+  shiftChartInst=new Chart(document.getElementById('shiftCoverageChart'),{
+    type:'bar',data:{labels:coverage.map(c=>c.start),datasets:[
+      {label:'Required (gross)',data:coverage.map(c=>c.required),backgroundColor:'rgba(224,53,53,.25)',borderColor:'#e03535',borderWidth:1},
+      {label:'Planned',data:coverage.map(c=>c.planned),backgroundColor:'rgba(54,87,232,.35)',borderColor:'#3657e8',borderWidth:1}
+    ]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:true,maxTicksLimit:12}},y:{beginAtZero:true}}}
+  });
+}
+
+/* ================================================================
+   TAB 8: SHIFT RECOMMENDATION — FIX 7 (gross target) + FIX 11 (comparison)
+================================================================ */
+function populateSRDays(){
+  document.getElementById('srDaySelect').innerHTML=DAYS.map((d,i)=>`<option value="${i}">${d}</option>`).join('');
+  renderShiftRecommendation();
+}
+function populateSRSelects(){
+  document.getElementById('srHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
+  document.getElementById('srDaySelect').innerHTML=DAYS.map((d,i)=>`<option value="${i}">${d}</option>`).join('');
+  renderSRChannelPicker();renderShiftRecommendation();
+}
+function renderShiftRecommendation(){
+  const el=document.getElementById('shiftRecommendationContent');
+  const hid=document.getElementById('srHolidaySelect')?.value;
+  const dayIdx=+(document.getElementById('srDaySelect')?.value||0);
+  const pool=+(document.getElementById('srAgentPool')?.value||50);
+  const h=hid&&APP.holidays.find(x=>x.id===hid);
+  if(!h||!srSelectedChannels.size){
+    el.innerHTML='<div class="empty-state"><div class="empty-state__icon">🗓️</div><div class="empty-state__title">Select a holiday, day and at least one channel</div></div>';
+    return;
+  }
+  const channels=[...srSelectedChannels];
+  el.innerHTML=channels.map(ch=>{
+    const{days}=buildDailyData(h,ch);
+    if(!days||!days[dayIdx])return`<div class="alert alert--warning mb-4">Run HC &amp; Coverage tab first for <strong>${ch}</strong>.</div>`;
+    const ivs=days[dayIdx].intervals;
+    if(!ivs.length)return`<div class="alert alert--warning mb-4">Zero volume on this day for <strong>${ch}</strong>.</div>`;
+    const opStart=days[dayIdx].opStart;const opEnd=days[dayIdx].opEnd;
+    const chPool=Math.round(pool/channels.length);
+    const assigned=greedyOptimise(ivs,opStart,opEnd,chPool);
+    const statusClass=assigned.coveragePct>=95?'success':assigned.coveragePct>=80?'warning':'danger';
+    // FIX 11: planned shift comparison
+    const plannedCoverage=computeShiftCoverage(ivs,shiftEntries);
+    const plannedGreen=plannedCoverage.filter(c=>c.risk==='green').length;
+    const plannedPct=ivs.length?Math.round(100*plannedGreen/ivs.length):0;
+    const deltaPct=assigned.coveragePct-plannedPct;
+    return`<div class="card mb-6">
+      <div class="card__header">
+        <span class="card__title"><span class="badge badge--${ch}">${ch}</span> &nbsp; ${escHtml(h.name)||'Holiday'}, ${DAYS[dayIdx]}</span>
+        <span class="badge badge--${statusClass==='success'?'green':statusClass==='warning'?'amber':'red'}">${assigned.coveragePct}% SL coverage</span>
+      </div>
+      <div class="metrics-row mb-4">
+        <div class="metric-card metric-card--${statusClass}"><div class="metric-card__label">Rec. SL coverage</div><div class="metric-card__value">${assigned.coveragePct}%</div></div>
+        <div class="metric-card metric-card--primary"><div class="metric-card__label">Planned SL coverage</div><div class="metric-card__value">${plannedPct}%</div></div>
+        <div class="metric-card ${deltaPct>=0?'metric-card--success':'metric-card--danger'}"><div class="metric-card__label">Recommendation delta</div><div class="metric-card__value">${deltaPct>=0?'+':''}${deltaPct}%</div></div>
+        <div class="metric-card"><div class="metric-card__label">Agents assigned</div><div class="metric-card__value">${assigned.totalAssigned}</div></div>
+        <div class="metric-card metric-card--danger"><div class="metric-card__label">At-risk intervals</div><div class="metric-card__value">${assigned.atRisk}</div></div>
+      </div>
+      ${assigned.totalAssigned>chPool?'<div class="alert alert--danger mb-4">⚠️ Required HC exceeds agent pool allocation for this channel.</div>':''}
+      <div class="layout-cols">
+        <div>
+          <div class="card" style="background:var(--surface-sunken)">
+            <div class="card__header"><span class="card__title" style="font-size:var(--text-sm)">Recommended shifts</span>
+              <span class="t-caption">Suggested starting point — greedy heuristic</span></div>
+            <table class="data-table" style="font-size:var(--text-sm)">
+              <thead><tr><th>Shift</th><th class="th--right">Start</th><th class="th--right">End</th><th class="th--right">Agents</th></tr></thead>
+              <tbody>${assigned.shifts.map(s=>`<tr><td>${s.name}</td><td class="td--right td--mono">${s.start}</td><td class="td--right td--mono">${s.end}</td><td class="td--right"><strong>${s.agents}</strong></td></tr>`).join('')}</tbody>
+              <tfoot><tr><td colspan="3">Total</td><td class="td--right">${assigned.totalAssigned}</td></tr></tfoot>
+            </table>
+          </div>
+        </div>
+        <div>
+          <div class="table-wrap" style="max-height:320px;overflow-y:auto">
+            <table class="interval-table">
+              <thead><tr><th>Interval</th><th>Req (gross)</th><th>Planned</th><th>Rec.</th><th>Better?</th></tr></thead>
+              <tbody>${assigned.intervalCoverage.map((c,i)=>{
+                const pc=plannedCoverage[i]||{planned:0};
+                const planBetter=pc.planned>=c.required&&c.planned<c.required;
+                const recBetter=c.planned>=c.required&&pc.planned<c.required;
+                const rowCls=planBetter?'compare-better-planned':recBetter?'compare-better-rec':'compare-equal';
+                return`<tr class="${rowCls}">
+                  <td>${c.start}–${c.end}</td><td>${c.required}</td>
+                  <td>${pc.planned}</td><td>${c.planned}</td>
+                  <td>${planBetter?'Planned ✓':recBetter?'Rec. ✓':'Equal'}</td>
+                </tr>`;}).join('')}
+              </tbody>
+            </table>
+          </div>
+          <div class="flex gap-3 mt-2" style="font-size:var(--text-xs)">
+            <span style="background:var(--color-teal-50);padding:2px 8px;border-radius:4px">■ Planned better</span>
+            <span style="background:var(--color-primary-50);padding:2px 8px;border-radius:4px">■ Rec. better</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ================================================================
+   GREEDY OPTIMISER — FIX 1 (overnight-safe) + FIX 7 (targets grossHC)
+================================================================ */
+function greedyOptimise(intervals,opStart,opEnd,pool){
+  const durationH=windowDurationHours(opStart,opEnd)||8;
+  const shiftLen=Math.min(8,durationH);
+  const seen=new Set();
+  const rawShifts=[
+    {name:'Early',  start:opStart,                              end:addHours(opStart,shiftLen)},
+    {name:'Mid-AM', start:addHours(opStart,2),                  end:addHours(opStart,2+shiftLen)},
+    {name:'Core',   start:addHours(opStart,Math.floor(durationH/4)),end:addHours(opStart,Math.floor(durationH/4)+shiftLen)},
+    {name:'Mid-PM', start:addHours(opStart,Math.floor(durationH/2)),end:addHours(opStart,Math.floor(durationH/2)+shiftLen)},
+    {name:'Late',   start:addHours(opEnd,-shiftLen),            end:opEnd},
+    {name:'Close',  start:addHours(opEnd,-Math.ceil(shiftLen/2)),end:opEnd}
+  ].filter(s=>{const k=s.start+'_'+s.end;if(seen.has(k))return false;seen.add(k);return true;});
+
+  const n=intervals.length;
+  const assigned=new Array(rawShifts.length).fill(0);
+  const coverage=new Array(n).fill(0);
+  // FIX 1: use intervalOverlapsShift for all coverage checks
+  const shiftCovers=rawShifts.map(s=>intervals.map(iv=>intervalOverlapsShift(toMinutes(iv.start),toMinutes(iv.end),toMinutes(s.start),toMinutes(s.end))));
+
+  let used=0;
+  while(used<pool){
+    // FIX 7: deficit against grossHC
+    const deficit=intervals.map((iv,i)=>Math.max(0,iv.grossHC-coverage[i]));
+    if(deficit.every(d=>d<=0))break;
+    let bestShift=-1,bestGain=0;
+    rawShifts.forEach((_,si)=>{const gain=deficit.reduce((a,d,i)=>a+(shiftCovers[si][i]?d:0),0);if(gain>bestGain){bestGain=gain;bestShift=si;}});
+    if(bestShift<0)break;
+    assigned[bestShift]++;
+    shiftCovers[bestShift].forEach((covers,i)=>{if(covers)coverage[i]++;});
+    used++;
+  }
+  const resultShifts=rawShifts.map((s,si)=>({...s,agents:assigned[si]})).filter(s=>s.agents>0);
+  const intervalCoverage=intervals.map((iv,i)=>{
+    const req=iv.grossHC,planned=coverage[i],delta=planned-req;
+    const risk=delta>=0?'green':(delta>=-Math.ceil(req*0.15)?'amber':'red');
+    return{start:iv.start,end:iv.end,required:req,planned,delta,risk};
+  });
+  const green=intervalCoverage.filter(c=>c.risk==='green').length;
+  return{shifts:resultShifts,totalAssigned:used,intervalCoverage,atRisk:intervalCoverage.filter(c=>c.risk==='red').length,coveragePct:n?Math.round(100*green/n):0};
+}
+
+/* ================================================================
+   TAB SWITCHING
+================================================================ */
+function switchTab(idx){
+  document.querySelectorAll('.tab-panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
+  document.querySelectorAll('.tab-nav__item').forEach((b,i)=>{b.classList.toggle('active',i===idx);b.setAttribute('aria-selected',i===idx?'true':'false');});
+  if(idx===1)renderHistoricalAnalysis();
+  if(idx===2)renderCombinations();
+  if(idx===3)renderRecommendation();
+  if(idx===4)renderDailyBreakdown();
+  if(idx===5){populateHCSelects();updateShrinkage();renderHCTab();}
+  if(idx===6){populateSPSelects();}
+  if(idx===7){populateSRSelects();}
+}
+
+/* ================================================================
+   IMPORT / EXPORT — FIX 12: full config in export
+================================================================ */
+function importFromFile(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{try{loadFromJSON(JSON.parse(e.target.result));alert('Data imported.');}catch(err){alert('Could not parse JSON: '+err.message);}};
+  reader.onerror=()=>alert('Could not read file.');
+  reader.readAsText(file);input.value='';
+}
+function loadFromJSON(d){
+  if(d.config){
+    if(d.config.defaultOperatingHours){
+      document.getElementById('defaultStart').value=d.config.defaultOperatingHours.start;
+      document.getElementById('defaultEnd').value=d.config.defaultOperatingHours.end;
+    }
+    if(d.config.defaultShrinkage){
+      document.getElementById('shrinkPL').value=d.config.defaultShrinkage.plannedLeave;
+      document.getElementById('shrinkUL').value=d.config.defaultShrinkage.unplannedLeave;
+      document.getElementById('shrinkTR').value=d.config.defaultShrinkage.training;
+    }
+    if(d.config.channelParams){
+      if(d.config.channelParams.voice)document.getElementById('ahtVoice').value=d.config.channelParams.voice.aht_seconds||360;
+      if(d.config.channelParams.chat){document.getElementById('ahtChat').value=d.config.channelParams.chat.aht_seconds||480;document.getElementById('chatConcurrency').value=d.config.channelParams.chat.concurrency||2.5;}
+      if(d.config.channelParams.email){document.getElementById('ahtEmail').value=d.config.channelParams.email.aht_seconds||600;if(d.config.channelParams.email.occupancy_pct)document.getElementById('emailOccupancy').value=d.config.channelParams.email.occupancy_pct;}
+      if(d.config.channelParams.blended){document.getElementById('blendedVoicePct').value=d.config.channelParams.blended.voice_pct||60;document.getElementById('blendedChatPct').value=d.config.channelParams.blended.chat_pct||40;}
+    }
+  }
+  if(d.holidays){
+    APP.holidays=d.holidays.map(h=>{
+      const nh=newHoliday(h.id||'h'+Date.now());
+      nh.name=h.name||'';nh.date=h.date||'';nh.channels=h.channels||['voice'];
+      nh.planSource=h.planSource||'WFM Forecast';nh.planVolume=h.planVolume||{voice:0,chat:0,email:0,blended:0};
+      nh.operatingHoursOverride=h.operatingHours?.overridden||false;
+      if(h.operatingHours)nh.operatingHours={start:h.operatingHours.start||'08:00',end:h.operatingHours.end||'20:00'};
+      if(h.historicalData){['Y1','Y2','Y3'].forEach(y=>{if(h.historicalData[y]){const yd=h.historicalData[y];
+        nh.years[y].year=yd.year||'';
+        nh.years[y].actual=typeof yd.actualVolume==='object'?yd.actualVolume:{voice:yd.actualVolume||0,chat:0,email:0,blended:0};
+        nh.years[y].baseline=typeof yd.baselineVolume==='object'?yd.baselineVolume:{voice:yd.baselineVolume||0,chat:0,email:0,blended:0};
+        if(yd.anomalyFlag&&yd.anomalySource==='manual')nh.manualAnomalyOverrides[y]=true;
+      }});}
+      return nh;
+    });
+  }
+  hcCache={};updateShrinkage();validateBlendedSplit();validateAHT();renderHolidayList();
+}
+function exportData(){
+  downloadJSON({_exported:new Date().toISOString(),_version:'1.2',
+    config:{defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd},
+      defaultShrinkage:{plannedLeave:APP.config.shrink.pl,unplannedLeave:APP.config.shrink.ul,training:APP.config.shrink.tr,total:APP.config.shrink.total},
+      serviceLevelTargets:{voice:{sl_pct:APP.config.sl.voicePct,sl_seconds:APP.config.sl.voiceSec},chat:{sl_pct:APP.config.sl.chatPct,sl_seconds:APP.config.sl.chatSec},email:{sl_pct:APP.config.sl.emailPct,sl_hours:APP.config.sl.emailHrs}},
+      channelParams:{voice:{aht_seconds:APP.config.aht.voice},chat:{aht_seconds:APP.config.aht.chat,concurrency:APP.config.concurrency},email:{aht_seconds:APP.config.aht.email,occupancy_pct:APP.config.emailOccupancy},blended:{voice_pct:APP.config.blendedVoicePct,chat_pct:APP.config.blendedChatPct}}},
+    holidays:APP.holidays},`holiday_plan_${new Date().toISOString().slice(0,10)}.json`);
+}
+function exportFinalPlan(){
+  downloadJSON({_type:'final_plan',_exported:new Date().toISOString(),_version:'1.2',
+    config:{shrinkage:APP.config.shrink,serviceLevelTargets:APP.config.sl,aht:APP.config.aht,concurrency:APP.config.concurrency,emailOccupancy:APP.config.emailOccupancy,blendedSplit:{voice:APP.config.blendedVoicePct,chat:APP.config.blendedChatPct},defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd}},
+    holidays:APP.holidays.map(h=>({name:h.name,date:h.date,planSource:h.planSource,channels:h.channels,
+      selectedCombinations:h.selectedCombos,
+      peakHC:CHANNELS.filter(ch=>h.channels.includes(ch)).reduce((acc,ch)=>{
+        const{days}=buildDailyData(h,ch);
+        if(days&&days.length)acc[ch]={peakNetHC:Math.max(...days.map(d=>d.netHC)),peakGrossHC:Math.max(...days.map(d=>d.grossHC)),weeklyForecast:days.reduce((a,d)=>a+d.volume,0)};
+        return acc;},{})
+    }))},`holiday_final_plan_${new Date().toISOString().slice(0,10)}.json`);
+}
+function downloadJSON(obj,fn){
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));a.download=fn;a.click();
+}
+
+/* FIX 9: resetAll clears shift rows from DOM */
+function resetAll(){
+  if(!confirm('Reset all data and start a new plan?'))return;
+  APP.holidays=[];hcCache={};shiftEntries=[];
+  spSelectedChannels=new Set(['voice']);srSelectedChannels=new Set(['voice']);spActivePanelCh='voice';
+  renderHolidayList();
+  renderShiftRows();                                         // FIX 9: clear DOM immediately
+  switchTab(0);
+}
+
+/* ================================================================
+   FIX 12: SAFARI-SAFE BACKEND PING
+================================================================ */
+async function pingBackend(){
+  let timedOut=false;
+  const controller=new AbortController();
+  const timer=setTimeout(()=>{timedOut=true;controller.abort();},1500);
+  try{
+    const r=await fetch(BACKEND_URL+'/health',{signal:controller.signal});
+    clearTimeout(timer);
+    const d=await r.json();
+    APP.backendOnline=d.status==='ok';
+  }catch(e){clearTimeout(timer);APP.backendOnline=false;}
+  document.getElementById('backendDot').className='backend-dot'+(APP.backendOnline?' online':'');
+  document.getElementById('backendLabel').textContent=APP.backendOnline?'Backend online':'Backend offline (browser mode)';
+}
+
+/* ================================================================
+   INIT
+================================================================ */
+window.addEventListener('DOMContentLoaded',()=>{
+  updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();
+  pingBackend();setInterval(pingBackend,15000);
+});
+</script>
+</body>
+</html>

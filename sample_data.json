@@ -1,0 +1,194 @@
+{
+  "_meta": {
+    "version": "1.0",
+    "description": "Sample holiday planning data for WFM Holiday Planning Template",
+    "instructions": "Load this file via the Import Sample Data button on the Setup tab. All values are illustrative only — replace with your actual data."
+  },
+
+  "config": {
+    "defaultOperatingHours": { "start": "08:00", "end": "20:00" },
+    "defaultShrinkage": {
+      "plannedLeave": 8,
+      "unplannedLeave": 5,
+      "training": 3
+    },
+    "serviceLevelTargets": {
+      "voice":   { "sl_pct": 80, "sl_seconds": 20 },
+      "chat":    { "sl_pct": 90, "sl_seconds": 30 },
+      "email":   { "sl_pct": 95, "sl_hours": 4 },
+      "blended": { "sl_pct": 85, "sl_seconds": 25 }
+    },
+    "channelParams": {
+      "voice": {
+        "aht_seconds": 360,
+        "occupancy_target_pct": 85
+      },
+      "chat": {
+        "aht_seconds": 480,
+        "concurrency": 2.5,
+        "occupancy_target_pct": 80
+      },
+      "email": {
+        "aht_seconds": 600,
+        "throughput_per_agent_per_hour": 6,
+        "occupancy_target_pct": 75
+      },
+      "blended": {
+        "aht_seconds": 420,
+        "occupancy_target_pct": 82
+      }
+    }
+  },
+
+  "holidays": [
+    {
+      "id": "h001",
+      "name": "Christmas Day",
+      "date": "2024-12-25",
+      "channels": ["voice", "chat", "email"],
+      "operatingHours": { "start": "09:00", "end": "17:00", "overridden": true },
+      "planSource": "WFM Forecast",
+      "planVolume": {
+        "voice": 4200,
+        "chat": 1800,
+        "email": 950
+      },
+      "historicalData": {
+        "Y1": {
+          "year": 2021,
+          "baselineVolume": { "voice": 8500, "chat": 3200, "email": 1800 },
+          "actualVolume":   { "voice": 3600, "chat": 1100, "email": 620 },
+          "anomalyFlag": true,
+          "anomalySource": "auto",
+          "anomalyNote": "COVID-19 restrictions — abnormally low contact volume"
+        },
+        "Y2": {
+          "year": 2022,
+          "baselineVolume": { "voice": 9200, "chat": 3600, "email": 2000 },
+          "actualVolume":   { "voice": 5100, "chat": 1850, "email": 940 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": null
+        },
+        "Y3": {
+          "year": 2023,
+          "baselineVolume": { "voice": 9800, "chat": 3900, "email": 2200 },
+          "actualVolume":   { "voice": 5600, "chat": 2050, "email": 1050 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": null
+        }
+      },
+      "dowSplit": {
+        "voice":   { "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0.45, "Sun": 0.55 },
+        "chat":    { "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0.42, "Sun": 0.58 },
+        "email":   { "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0.40, "Sun": 0.60 }
+      },
+      "selectedCombination": "Avg(Y2+Y3)",
+      "recommendedCombination": "Avg(Y2+Y3)"
+    },
+    {
+      "id": "h002",
+      "name": "New Year's Day",
+      "date": "2025-01-01",
+      "channels": ["voice", "chat", "email"],
+      "operatingHours": { "start": "10:00", "end": "18:00", "overridden": true },
+      "planSource": "Finance Target",
+      "planVolume": {
+        "voice": 5100,
+        "chat": 2200,
+        "email": 1100
+      },
+      "historicalData": {
+        "Y1": {
+          "year": 2022,
+          "baselineVolume": { "voice": 9200, "chat": 3600, "email": 2000 },
+          "actualVolume":   { "voice": 4800, "chat": 2000, "email": 980 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": null
+        },
+        "Y2": {
+          "year": 2023,
+          "baselineVolume": { "voice": 9800, "chat": 3900, "email": 2200 },
+          "actualVolume":   { "voice": 5200, "chat": 2250, "email": 1100 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": null
+        },
+        "Y3": {
+          "year": 2024,
+          "baselineVolume": { "voice": 10200, "chat": 4100, "email": 2400 },
+          "actualVolume":   { "voice": 5500, "chat": 2400, "email": 1200 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": null
+        }
+      },
+      "dowSplit": {
+        "voice":   { "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 1.0 },
+        "chat":    { "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 1.0 },
+        "email":   { "Mon": 0, "Tue": 0, "Wed": 0, "Thu": 0, "Fri": 0, "Sat": 0, "Sun": 1.0 }
+      },
+      "selectedCombination": "Avg(Y1+Y2+Y3)",
+      "recommendedCombination": "Avg(Y1+Y2+Y3)"
+    },
+    {
+      "id": "h003",
+      "name": "Diwali",
+      "date": "2025-10-20",
+      "channels": ["voice", "chat", "email", "blended"],
+      "operatingHours": { "start": "08:00", "end": "22:00", "overridden": false },
+      "planSource": "WFM Forecast",
+      "planVolume": {
+        "voice": 12500,
+        "chat": 5800,
+        "email": 2800,
+        "blended": 21100
+      },
+      "historicalData": {
+        "Y1": {
+          "year": 2022,
+          "baselineVolume": { "voice": 9800, "chat": 4200, "email": 2100, "blended": 16100 },
+          "actualVolume":   { "voice": 13200, "chat": 5900, "email": 2900, "blended": 22000 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": "Volume spike on Diwali due to promotional campaign"
+        },
+        "Y2": {
+          "year": 2023,
+          "baselineVolume": { "voice": 10200, "chat": 4500, "email": 2200, "blended": 16900 },
+          "actualVolume":   { "voice": 13800, "chat": 6200, "email": 3100, "blended": 23100 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": null
+        },
+        "Y3": {
+          "year": 2024,
+          "baselineVolume": { "voice": 10800, "chat": 4800, "email": 2400, "blended": 18000 },
+          "actualVolume":   { "voice": 14600, "chat": 6600, "email": 3400, "blended": 24600 },
+          "anomalyFlag": false,
+          "anomalySource": null,
+          "anomalyNote": null
+        }
+      },
+      "dowSplit": {
+        "voice":   { "Mon": 0.12, "Tue": 0.14, "Wed": 0.16, "Thu": 0.18, "Fri": 0.20, "Sat": 0.12, "Sun": 0.08 },
+        "chat":    { "Mon": 0.11, "Tue": 0.13, "Wed": 0.15, "Thu": 0.19, "Fri": 0.22, "Sat": 0.13, "Sun": 0.07 },
+        "email":   { "Mon": 0.13, "Tue": 0.15, "Wed": 0.16, "Thu": 0.17, "Fri": 0.19, "Sat": 0.12, "Sun": 0.08 },
+        "blended": { "Mon": 0.12, "Tue": 0.14, "Wed": 0.16, "Thu": 0.18, "Fri": 0.20, "Sat": 0.12, "Sun": 0.08 }
+      },
+      "selectedCombination": "Avg(Y1+Y2+Y3)",
+      "recommendedCombination": "Avg(Y1+Y2+Y3)"
+    }
+  ],
+
+  "shiftTemplates": [
+    { "id": "s001", "name": "Early",     "start": "07:00", "end": "15:00", "durationHours": 8 },
+    { "id": "s002", "name": "Mid",       "start": "10:00", "end": "18:00", "durationHours": 8 },
+    { "id": "s003", "name": "Late",      "start": "13:00", "end": "21:00", "durationHours": 8 },
+    { "id": "s004", "name": "Split AM",  "start": "09:00", "end": "14:00", "durationHours": 5 },
+    { "id": "s005", "name": "Split PM",  "start": "15:00", "end": "20:00", "durationHours": 5 },
+    { "id": "s006", "name": "Extended",  "start": "08:00", "end": "20:00", "durationHours": 12 }
+  ]
+}
