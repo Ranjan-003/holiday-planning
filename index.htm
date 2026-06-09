@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <style>
 /* ── App-specific styles ── */
 .holiday-row-card{border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--sp-5);background:var(--surface-card);margin-bottom:var(--sp-4);box-shadow:var(--shadow-sm)}
@@ -74,6 +75,27 @@
 .compare-better-planned{background:var(--color-teal-50)}
 .compare-better-rec{background:var(--color-primary-50)}
 .compare-equal{background:var(--surface-sunken)}
+/* ── v2.0 additions ── */
+.queue-context-bar{background:var(--surface-sunken);border-bottom:1px solid var(--border-subtle);padding:var(--sp-3) var(--sp-6);display:flex;align-items:flex-end;gap:var(--sp-4);flex-wrap:wrap}
+.queue-context-bar .form-group{margin:0;min-width:160px}
+.queue-context-bar .form-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+.queue-context-bar input,.queue-context-bar select{height:32px;font-size:var(--text-sm)}
+.queue-context-bar .btn{height:32px;white-space:nowrap}
+.year-banner{background:var(--color-amber-50);border-bottom:1px solid var(--color-amber-100);padding:var(--sp-2) var(--sp-6);font-size:var(--text-sm);color:var(--color-amber-700);align-items:center;gap:var(--sp-3);display:none}
+.year-banner.visible{display:flex}
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center}
+.modal-overlay.hidden{display:none}
+.modal{background:var(--surface-card);border-radius:var(--radius-xl);box-shadow:var(--shadow-xl);width:min(660px,94vw);max-height:88vh;overflow-y:auto}
+.modal__header{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-4) var(--sp-5);border-bottom:1px solid var(--border-subtle)}
+.modal__header h3{font-size:var(--text-lg);font-weight:var(--weight-semibold);margin:0}
+.modal__body{padding:var(--sp-5)}
+.modal__footer{padding:var(--sp-4) var(--sp-5);border-top:1px solid var(--border-subtle);display:flex;justify-content:flex-end;gap:var(--sp-3)}
+.preview-table{width:100%;border-collapse:collapse;font-size:var(--text-xs);margin-top:var(--sp-3);max-height:180px;overflow-y:auto;display:block}
+.preview-table th,.preview-table td{padding:4px 8px;border-bottom:1px solid var(--border-subtle);text-align:left;white-space:nowrap}
+.preview-table th{background:var(--surface-sunken);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary)}
+.plan-list-item{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-md);border:1px solid var(--border-subtle);margin-bottom:var(--sp-2);cursor:pointer;transition:background var(--transition-fast)}
+.plan-list-item:hover{background:var(--surface-sunken)}
+.holiday-year-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-4)}
 </style>
 </head>
 <body>
@@ -88,7 +110,7 @@
       <rect x="15" y="15" width="7" height="7" rx="2" fill="white" opacity=".9"/>
     </svg>
     <span class="app-header__wordmark">Holiday Planning Template</span>
-    <span class="app-header__subtitle">WFM Scheduling v1.2</span>
+    <span class="app-header__subtitle">WFM Scheduling v2.0</span>
   </div>
   <div class="app-header__actions">
     <div class="backend-status" id="backendStatus">
@@ -97,12 +119,93 @@
     </div>
     <label class="btn btn--secondary btn--sm" style="cursor:pointer">
       Import data
-      <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="importFromFile(this)">
+      <input type="file" id="importFileInput" accept=".json,.csv,.xls,.xlsm,.xlsx" style="display:none" onchange="importFromFile(this)">
     </label>
     <button class="btn btn--secondary btn--sm" onclick="exportData()">Export JSON</button>
     <button class="btn btn--primary btn--sm" onclick="resetAll()">New plan</button>
   </div>
 </header>
+
+<!-- ═══ QUEUE CONTEXT BAR ═══ -->
+<div class="queue-context-bar">
+  <div class="form-group">
+    <label class="form-label">Queue name</label>
+    <input type="text" id="queueName" list="queueDetectedList" placeholder="Enter or select queue…" style="min-width:240px" oninput="APP.queue.name=this.value">
+    <datalist id="queueDetectedList"></datalist>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Region</label>
+    <select id="queueRegion" onchange="APP.queue.region=this.value">
+      <option value="">— Select —</option>
+      <option value="APJ">APJ</option>
+      <option value="EMEA">EMEA</option>
+      <option value="AMER">AMER</option>
+      <option value="LATAM">LATAM</option>
+    </select>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Queue type</label>
+    <select id="queueType" onchange="APP.queue.type=this.value">
+      <option value="DB">DB (Internal)</option>
+      <option value="OSP">OSP (External)</option>
+    </select>
+  </div>
+  <button class="btn btn--secondary btn--sm" onclick="saveQueuePlan()">Save plan</button>
+  <button class="btn btn--secondary btn--sm" onclick="openLoadModal()">Load saved plan</button>
+</div>
+
+<!-- ═══ YEAR BANNER ═══ -->
+<div class="year-banner" id="yearBanner">
+  ⚠️ <span id="yearBannerText">Year not detected in the imported file — assuming Last Year <span id="yearBannerYear"></span>. Adjust via the import override if needed.</span>
+</div>
+
+<!-- ═══ IMPORT MODAL ═══ -->
+<div class="modal-overlay hidden" id="importModal">
+  <div class="modal">
+    <div class="modal__header">
+      <h3>Import spreadsheet data</h3>
+      <button class="btn btn--ghost btn--sm" onclick="closeImportModal()">✕</button>
+    </div>
+    <div class="modal__body">
+      <div id="importYearDetect" class="alert alert--info mb-4"></div>
+      <div class="layout-cols" style="grid-template-columns:1fr 1fr;gap:var(--sp-4)">
+        <div class="form-group">
+          <label class="form-label">Detected year (override if wrong)</label>
+          <input type="number" id="importYearOverride" placeholder="e.g. 2025" min="2000" max="2099" style="height:32px">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Queue name (from file)</label>
+          <select id="importQueueSelect" style="height:32px" onchange="updateImportPreview()"></select>
+        </div>
+      </div>
+      <div class="form-group mt-3">
+        <label class="form-label">Data preview (first 10 rows for selected queue)</label>
+        <div style="overflow-x:auto"><table class="preview-table" id="importPreviewTable"><thead></thead><tbody></tbody></table></div>
+      </div>
+      <div class="alert alert--warning mt-3 hidden" id="importColWarn"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeImportModal()">Cancel</button>
+      <button class="btn btn--primary" onclick="applyImport()">Apply import</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ LOAD PLAN MODAL ═══ -->
+<div class="modal-overlay hidden" id="loadModal">
+  <div class="modal">
+    <div class="modal__header">
+      <h3>Load saved plan</h3>
+      <button class="btn btn--ghost btn--sm" onclick="closeLoadModal()">✕</button>
+    </div>
+    <div class="modal__body">
+      <div id="savedPlansList"></div>
+    </div>
+    <div class="modal__footer">
+      <button class="btn btn--secondary" onclick="closeLoadModal()">Close</button>
+    </div>
+  </div>
+</div>
 
 <main class="app-body">
 <nav class="tab-nav" role="tablist">
@@ -445,8 +548,14 @@ const BACKEND_URL='http://localhost:5050';
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 const CHANNELS=['voice','chat','email','blended'];
 const DEFAULT_DOW_SPLIT=[14.3,14.3,14.3,14.3,14.3,14.3,14.2];
+const YEAR_SLOTS=['Y1','Y2','Y3','Y4','Y5'];
+const REGIONS=['APJ','EMEA','AMER','LATAM'];
+const QUEUE_TYPES=['DB','OSP'];
 
 let APP={
+  queue:{name:'',region:'',type:'DB'},
+  detectedBaseYear:null,
+  detectedQueues:[],
   holidays:[],
   config:{
     defaultStart:'08:00',defaultEnd:'20:00',
@@ -454,13 +563,100 @@ let APP={
     sl:{voicePct:80,voiceSec:20,chatPct:90,chatSec:30,emailPct:95,emailHrs:4},
     aht:{voice:360,chat:480,email:600},
     concurrency:2.5,
-    emailOccupancy:75,         // FIX 2
-    blendedVoicePct:60,        // FIX 3
-    blendedChatPct:40,         // FIX 3
+    emailOccupancy:75,
+    blendedVoicePct:60,
+    blendedChatPct:40,
     anomalyThreshold:2
   },
   backendOnline:false
 };
+/* pending Excel parse result, held until user confirms in import modal */
+let _pendingImport=null;
+
+/* ================================================================
+   YEAR LABEL HELPERS
+================================================================ */
+function getBaseYear(){return APP.detectedBaseYear||(new Date().getFullYear()-1);}
+function getYearLabel(slot){
+  const idx=YEAR_SLOTS.indexOf(slot);if(idx<0)return slot;
+  const yr=getBaseYear()-idx;
+  return idx===0?`Last Year ${yr}`:String(yr);
+}
+function getYearForSlot(slot){const idx=YEAR_SLOTS.indexOf(slot);return getBaseYear()-idx;}
+function getSlotForYear(year){
+  const diff=getBaseYear()-year;
+  if(diff<0||diff>=YEAR_SLOTS.length)return null;
+  return YEAR_SLOTS[diff];
+}
+function showYearBanner(detected){
+  const el=document.getElementById('yearBanner');
+  document.getElementById('yearBannerYear').textContent=getBaseYear();
+  if(!detected){el.classList.add('visible');}else{el.classList.remove('visible');}
+}
+
+/* ================================================================
+   INDEXEDDB PERSISTENCE
+================================================================ */
+const DB_NAME='wfm_holiday_planner',DB_VER=1,STORE='queue_plans';
+let idb=null;
+function initDB(){
+  return new Promise((res,rej)=>{
+    const req=indexedDB.open(DB_NAME,DB_VER);
+    req.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE,{keyPath:'queueName'});};
+    req.onsuccess=e=>{idb=e.target.result;res(idb);};
+    req.onerror=e=>rej(e.target.error);
+  });
+}
+async function saveQueuePlan(){
+  const name=document.getElementById('queueName').value.trim();
+  if(!name){alert('Enter a queue name before saving.');return;}
+  if(!idb){alert('Database not ready. Please try again.');return;}
+  const payload={queueName:name,region:document.getElementById('queueRegion').value,
+    type:document.getElementById('queueType').value,
+    savedAt:new Date().toISOString(),detectedBaseYear:APP.detectedBaseYear,
+    holidays:APP.holidays,config:APP.config};
+  await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).put(payload);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
+  alert(`Plan saved for queue "${name}".`);
+}
+async function listSavedPlans(){
+  if(!idb)return[];
+  return new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readonly');const req=tx.objectStore(STORE).getAll();req.onsuccess=()=>res(req.result||[]);req.onerror=e=>rej(e.target.error);});
+}
+async function deleteSavedPlan(name){
+  if(!idb)return;
+  await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).delete(name);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
+}
+async function openLoadModal(){
+  const plans=await listSavedPlans();
+  const el=document.getElementById('savedPlansList');
+  if(!plans.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No saved plans found.</div><div class="empty-state__body">Save a plan first using the "Save plan" button.</div></div>';}
+  else{el.innerHTML=plans.map(p=>`<div class="plan-list-item">
+    <div><strong>${escHtml(p.queueName)}</strong> &nbsp;<span class="badge badge--gray">${p.region||'—'}</span> &nbsp;<span class="badge badge--${p.type==='DB'?'blue':'amber'}">${p.type||'—'}</span>
+    <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">Saved ${new Date(p.savedAt).toLocaleString()}</div></div>
+    <div style="display:flex;gap:var(--sp-2)">
+      <button class="btn btn--primary btn--sm" onclick="restoreQueuePlan(${JSON.stringify(escHtml(p.queueName))})">Load</button>
+      <button class="btn btn--danger btn--sm" onclick="confirmDeletePlan(${JSON.stringify(escHtml(p.queueName))})">Delete</button>
+    </div></div>`).join('');}
+  document.getElementById('loadModal').classList.remove('hidden');
+}
+function closeLoadModal(){document.getElementById('loadModal').classList.add('hidden');}
+async function restoreQueuePlan(name){
+  if(!idb)return;
+  const p=await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readonly');const req=tx.objectStore(STORE).get(name);req.onsuccess=()=>res(req.result);req.onerror=e=>rej(e.target.error);});
+  if(!p){alert('Plan not found.');return;}
+  document.getElementById('queueName').value=p.queueName;
+  document.getElementById('queueRegion').value=p.region||'';
+  document.getElementById('queueType').value=p.type||'DB';
+  APP.queue={name:p.queueName,region:p.region||'',type:p.type||'DB'};
+  APP.detectedBaseYear=p.detectedBaseYear||null;
+  APP.holidays=p.holidays||[];
+  APP.config=Object.assign({},APP.config,p.config||{});
+  hcCache={};updateShrinkage();validateBlendedSplit();validateAHT();renderHolidayList();closeLoadModal();
+}
+async function confirmDeletePlan(name){
+  if(!confirm(`Delete saved plan for "${name}"?`))return;
+  await deleteSavedPlan(name);openLoadModal();
+}
 let hcCache={};
 let shiftEntries=[];
 let spSelectedChannels=new Set(['voice']);
@@ -678,14 +874,13 @@ function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 /* ================================================================
    HOLIDAY MODEL
 ================================================================ */
+function _emptyYear(){return{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}};}
 function newHoliday(id){
+  const years={};YEAR_SLOTS.forEach(y=>{years[y]=_emptyYear();});
   return{id,name:'',date:'',channels:['voice'],planSource:'WFM Forecast',
     planVolume:{voice:0,chat:0,email:0,blended:0},
     operatingHoursOverride:false,operatingHours:{start:'08:00',end:'20:00'},
-    years:{Y1:{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}},
-           Y2:{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}},
-           Y3:{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}}},
-    autoAnomalyFlags:{},manualAnomalyOverrides:{},
+    years,autoAnomalyFlags:{},manualAnomalyOverrides:{},
     dowSplit:{voice:[...DEFAULT_DOW_SPLIT],chat:[...DEFAULT_DOW_SPLIT],email:[...DEFAULT_DOW_SPLIT],blended:[...DEFAULT_DOW_SPLIT]},
     selectedCombos:{},combinations:{}};
 }
@@ -762,22 +957,22 @@ function renderHolidayList(){
         ${isSameTime?`<div class="overnight-warn mt-2">⚠️ Start and end time are identical — check operating hours.</div>`:
           isOvernight?`<div class="overnight-warn mt-2">⚠️ Overnight window (${effectiveStart}–${effectiveEnd}) — intervals will wrap past midnight correctly.</div>`:''}
       </div>
-      <label class="form-label mb-3">Historical data (weekly volume)</label>
+      <label class="form-label mb-3">Historical data (weekly volume) — <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Y1 = most recent year</span></label>
       <div class="holiday-year-grid">
-        ${['Y1','Y2','Y3'].map(y=>`<div class="year-block">
-          <div class="year-block__label">${y}</div>
-          <input type="number" placeholder="Calendar year" value="${h.years[y].year}"
+        ${YEAR_SLOTS.map(y=>`<div class="year-block">
+          <div class="year-block__label">${getYearLabel(y)}</div>
+          <input type="number" placeholder="Calendar year" value="${(h.years[y]||{}).year||''}"
             oninput="setHVal('${h.id}','years.${y}.year',this.value)">
           <label style="font-size:10px;color:var(--text-tertiary)">Actual volume</label>
           ${CHANNELS.map(ch=>`<div style="margin-bottom:4px">
             <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
-            <input type="number" value="${h.years[y].actual[ch]||0}"
+            <input type="number" value="${(h.years[y]&&h.years[y].actual[ch])||0}"
               oninput="setHVal('${h.id}','years.${y}.actual.${ch}',+this.value)">
           </div>`).join('')}
           <label style="font-size:10px;color:var(--text-tertiary);margin-top:4px;display:block">Baseline volume</label>
           ${CHANNELS.map(ch=>`<div style="margin-bottom:4px">
             <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
-            <input type="number" value="${h.years[y].baseline[ch]||0}"
+            <input type="number" value="${(h.years[y]&&h.years[y].baseline[ch])||0}"
               oninput="setHVal('${h.id}','years.${y}.baseline.${ch}',+this.value)">
           </div>`).join('')}
         </div>`).join('')}
@@ -801,8 +996,8 @@ function toggleChannel(hid,ch,checked){
 function computeImpact(actual,baseline){if(!baseline||baseline===0)return null;return((actual-baseline)/baseline)*100;}
 function detectAnomalies(h){
   const impacts=[];
-  ['Y1','Y2','Y3'].forEach(y=>{
-    if(h.years[y].year){const base=h.years[y].baseline.voice||0;const act=h.years[y].actual.voice||0;
+  YEAR_SLOTS.forEach(y=>{
+    if(h.years[y]?.year){const base=h.years[y].baseline.voice||0;const act=h.years[y].actual.voice||0;
       if(base>0){const imp=computeImpact(act,base);if(imp!==null)impacts.push({year:y,impact:imp});}}
   });
   if(impacts.length<2)return{};
@@ -842,13 +1037,13 @@ function renderHistoricalAnalysis(){
       <div class="mb-4"><div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
         <div class="table-wrap"><table class="data-table">
           <thead><tr><th>Year</th><th class="th--right">Actual</th><th class="th--right">Baseline</th><th class="th--right">Impact %</th><th class="th--center">Anomaly</th><th class="th--center">Override</th></tr></thead>
-          <tbody>${['Y1','Y2','Y3'].filter(y=>h.years[y].year).map(y=>{
+          <tbody>${YEAR_SLOTS.filter(y=>h.years[y]?.year).map(y=>{
             const act=h.years[y].actual[ch]||0,base=h.years[y].baseline[ch]||0;
             const imp=computeImpact(act,base);
             const isManual=h.manualAnomalyOverrides[y];
             const flagged=isManual!==undefined?isManual:(autoFlags[y]||false);
             return`<tr>
-              <td><strong>${y}</strong> — ${h.years[y].year}</td>
+              <td><strong>${getYearLabel(y)}</strong> &nbsp;<span style="color:var(--text-tertiary);font-size:var(--text-xs)">(${h.years[y].year})</span></td>
               <td class="td--right td--mono">${act.toLocaleString()}</td>
               <td class="td--right td--mono">${base>0?base.toLocaleString():'<span class="text-danger">0 — set baseline</span>'}</td>
               <td class="td--right">${imp!==null?`<span class="impact-chip ${imp<0?'impact-chip--drop':imp>0?'impact-chip--spike':'impact-chip--flat'}">${imp>=0?'+':''}${imp.toFixed(1)}%</span>`:'<span class="text-faint">No baseline</span>'}</td>
@@ -868,24 +1063,34 @@ function renderHistoricalAnalysis(){
 function recalcAll(){APP.holidays.forEach(h=>{h.autoAnomalyFlags=detectAnomalies(h);h.combinations={};});renderHistoricalAnalysis();}
 
 /* ================================================================
-   COMBINATION ENGINE — FIX 10: score breakdown for hover card
+   COMBINATION ENGINE — supports up to 5 year slots
 ================================================================ */
+function getAllSubsets(arr){
+  const result=[];
+  for(let size=1;size<=arr.length;size++){
+    const pick=(start,combo)=>{
+      if(combo.length===size){result.push([...combo]);return;}
+      for(let i=start;i<arr.length;i++)pick(i+1,[...combo,arr[i]]);
+    };
+    pick(0,[]);
+  }
+  return result;
+}
 function generateCombinations(h,ch){
-  const avail=['Y1','Y2','Y3'].filter(y=>h.years[y].year&&(h.years[y].actual[ch]||0)>0&&(h.years[y].baseline[ch]||0)>0);
+  const avail=YEAR_SLOTS.filter(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0&&(h.years[y].baseline[ch]||0)>0);
   const aFlags={...h.autoAnomalyFlags,...h.manualAnomalyOverrides};
   const impacts={};avail.forEach(y=>{impacts[y]=computeImpact(h.years[y].actual[ch]||0,h.years[y].baseline[ch]||0);});
   const planVol=h.planVolume[ch]||0;const combos=[];
-  const mkCombo=(name,yl)=>{
+  const mkCombo=(yl)=>{
     const vi=yl.map(y=>impacts[y]).filter(v=>v!==null);if(!vi.length)return null;
     const blended=vi.reduce((a,b)=>a+b,0)/vi.length;
     const forecasted=Math.round(planVol*(1+blended/100));
     const hasAnomaly=yl.some(y=>aFlags[y]);
     const {score,breakdown}=scoreCombo(yl,vi,aFlags);
+    const name=yl.length===1?getYearLabel(yl[0]):`Avg(${yl.map(getYearLabel).join('+')})`;
     return{combo:name,years:yl,impacts:vi,blendedImpact:blended,forecasted,hasAnomaly,score,breakdown,selected:false,recommended:false};
   };
-  avail.forEach(y=>{const c=mkCombo(y,[y]);if(c)combos.push(c);});
-  [['Y1','Y2'],['Y2','Y3'],['Y1','Y3']].forEach(p=>{if(p.every(y=>avail.includes(y))){const c=mkCombo(`Avg(${p.join('+')})`,p);if(c)combos.push(c);}});
-  if(avail.length===3){const c=mkCombo('Avg(Y1+Y2+Y3)',avail);if(c)combos.push(c);}
+  getAllSubsets(avail).forEach(subset=>{const c=mkCombo(subset);if(c)combos.push(c);});
   combos.sort((a,b)=>b.score-a.score);if(combos.length)combos[0].recommended=true;
   return combos;
 }
@@ -896,8 +1101,8 @@ function scoreCombo(years,impacts,aFlags){
   const std=impacts.length>1?Math.sqrt(impacts.reduce((a,b)=>a+Math.pow(b-mean,2),0)/impacts.length):0;
   const cv=(mean!==0&&std>0)?std/Math.abs(mean):(std>0?1:0);
   const consistency=Math.max(0,1-Math.min(cv,1));
-  const richness=Math.min(impacts.length/3,1);
-  const rMap={Y1:0.2,Y2:0.5,Y3:1.0};
+  const richness=Math.min(impacts.length/5,1);
+  const rMap={Y1:1.0,Y2:0.7,Y3:0.5,Y4:0.3,Y5:0.1};
   const recency=years.reduce((a,y)=>a+(rMap[y]||0.5),0)/years.length;
   const anomalyPenalty=0.3*years.filter(y=>aFlags[y]).length;
   const raw=0.4*consistency+0.3*richness+0.3*recency-anomalyPenalty;
@@ -1463,16 +1668,211 @@ function switchTab(idx){
 }
 
 /* ================================================================
-   IMPORT / EXPORT — FIX 12: full config in export
+   IMPORT / EXPORT — v2.0: multi-format import
 ================================================================ */
 function importFromFile(input){
   const file=input.files[0];if(!file)return;
-  const reader=new FileReader();
-  reader.onload=e=>{try{loadFromJSON(JSON.parse(e.target.result));alert('Data imported.');}catch(err){alert('Could not parse JSON: '+err.message);}};
-  reader.onerror=()=>alert('Could not read file.');
-  reader.readAsText(file);input.value='';
+  input.value='';
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(ext==='json'){
+    const reader=new FileReader();
+    reader.onload=e=>{try{loadFromJSON(JSON.parse(e.target.result));alert('Data imported.');}catch(err){alert('Could not parse JSON: '+err.message);}};
+    reader.onerror=()=>alert('Could not read file.');
+    reader.readAsText(file);
+  }else{
+    parseSpreadsheet(file).then(data=>{_pendingImport=data;openImportModal(data);}).catch(e=>alert('Could not read spreadsheet: '+e.message));
+  }
+}
+
+/* ── column name matcher ── */
+function findColIdx(headers,...keywords){
+  for(const kw of keywords){
+    const exact=headers.findIndex(h=>h!=null&&String(h).trim().toLowerCase()===kw.toLowerCase());
+    if(exact>=0)return exact;
+  }
+  for(const kw of keywords){
+    const partial=headers.findIndex(h=>h!=null&&String(h).trim().toLowerCase().includes(kw.toLowerCase()));
+    if(partial>=0)return partial;
+  }
+  return -1;
+}
+
+/* ── year extraction from a string or date value ── */
+function extractYear(val){
+  if(!val)return null;
+  if(val instanceof Date)return val.getFullYear();
+  const m=String(val).match(/\b(20[0-9]{2})\b/);
+  return m?parseInt(m[1]):null;
+}
+
+function detectYearFromData(headers,rows,filename){
+  const years=[];
+  // scan headers
+  headers.forEach(h=>{const y=extractYear(h);if(y)years.push(y);});
+  // scan first 50 data rows
+  rows.slice(0,50).forEach(row=>{
+    row.forEach(cell=>{
+      if(cell instanceof Date){years.push(cell.getFullYear());}
+      else if(typeof cell==='number'&&cell>=2000&&cell<=2099){years.push(cell);}
+      else{const y=extractYear(cell);if(y)years.push(y);}
+    });
+  });
+  // scan filename
+  const fy=extractYear(filename);if(fy)years.push(fy);
+  if(!years.length)return null;
+  // return the most recent year found that is <= current year
+  const now=new Date().getFullYear();
+  return Math.max(...years.filter(y=>y<=now));
+}
+
+async function parseSpreadsheet(file){
+  const buf=await file.arrayBuffer();
+  const wb=XLSX.read(buf,{type:'array',cellDates:true});
+  const wsName=wb.SheetNames[0];
+  const ws=wb.Sheets[wsName];
+  const rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false,dateNF:'yyyy-mm-dd'});
+  if(rawRows.length<2)throw new Error('Sheet appears empty or has no data rows.');
+
+  // find header row (first non-empty row)
+  let hdrIdx=0;
+  for(let i=0;i<Math.min(10,rawRows.length);i++){if(rawRows[i].some(c=>c!=null)){hdrIdx=i;break;}}
+  const headers=rawRows[hdrIdx].map(c=>c==null?'':String(c));
+  const dataRows=rawRows.slice(hdrIdx+1).filter(r=>r.some(c=>c!=null));
+
+  const colMap={
+    queueCol: findColIdx(headers,'queue name','queue_name','queue','name'),
+    volCol:   findColIdx(headers,'offered_cco','offered cco','actuals','actual','offered','volume','calls','handled'),
+    slCol:    findColIdx(headers,'sl','service level','sla','service_level'),
+    ahtCol:   findColIdx(headers,'aht','avg handle time','average handle time','handle time','avg_handle_time'),
+  };
+
+  const year=detectYearFromData(headers,dataRows,file.name);
+
+  // extract unique queues
+  const queues=[];
+  if(colMap.queueCol>=0){
+    dataRows.forEach(r=>{const v=r[colMap.queueCol];if(v!=null&&String(v).trim()&&!queues.includes(String(v).trim()))queues.push(String(v).trim());});
+  }
+
+  return{headers,dataRows,colMap,year,queues,sheetName:wsName,filename:file.name};
+}
+
+/* ── Import modal ── */
+function openImportModal(data){
+  const yearEl=document.getElementById('importYearDetect');
+  const yearInput=document.getElementById('importYearOverride');
+  if(data.year){
+    yearEl.className='alert alert--success mb-4';
+    yearEl.textContent=`Year detected: ${data.year} — will be stored as ${data.year===getBaseYear()?'Y1 (Last Year)':getSlotForYear(data.year)||'a new slot'}.`;
+    yearInput.value=data.year;
+  }else{
+    yearEl.className='alert alert--warning mb-4';
+    yearEl.textContent='Year not detected in this file. Enter the year manually below.';
+    yearInput.value='';
+  }
+  const qSel=document.getElementById('importQueueSelect');
+  qSel.innerHTML=data.queues.length
+    ?data.queues.map(q=>`<option value="${escHtml(q)}">${escHtml(q)}</option>`).join('')
+    :'<option value="">— No queue column detected —</option>';
+
+  // warn if key columns missing
+  const warn=document.getElementById('importColWarn');
+  const missing=[];
+  if(data.colMap.queueCol<0)missing.push('Queue Name');
+  if(data.colMap.volCol<0)missing.push('Volume/Offered_CCO');
+  if(missing.length){warn.textContent='Could not auto-detect columns: '+missing.join(', ')+'. Preview may be incomplete.';warn.classList.remove('hidden');}
+  else warn.classList.add('hidden');
+
+  updateImportPreview();
+  document.getElementById('importModal').classList.remove('hidden');
+}
+
+function updateImportPreview(){
+  const data=_pendingImport;if(!data)return;
+  const selQueue=document.getElementById('importQueueSelect').value;
+  const {headers,dataRows,colMap}=data;
+
+  // filter to selected queue rows (or all if no queue col)
+  let rows=dataRows;
+  if(colMap.queueCol>=0&&selQueue){
+    rows=dataRows.filter(r=>String(r[colMap.queueCol]||'').trim()===selQueue);
+  }
+  rows=rows.slice(0,10);
+
+  // columns to show: queue, volume, sl, aht + first 2 others
+  const showCols=[];
+  if(colMap.queueCol>=0)showCols.push({idx:colMap.queueCol,label:'Queue'});
+  if(colMap.volCol>=0)showCols.push({idx:colMap.volCol,label:'Volume/Offered'});
+  if(colMap.slCol>=0)showCols.push({idx:colMap.slCol,label:'SL'});
+  if(colMap.ahtCol>=0)showCols.push({idx:colMap.ahtCol,label:'AHT'});
+  // add any extra cols up to 6 total
+  headers.forEach((h,i)=>{
+    if(showCols.length<6&&!showCols.some(c=>c.idx===i)&&h)showCols.push({idx:i,label:h});
+  });
+
+  const tbl=document.getElementById('importPreviewTable');
+  tbl.querySelector('thead').innerHTML='<tr>'+showCols.map(c=>`<th>${escHtml(c.label)}</th>`).join('')+'</tr>';
+  tbl.querySelector('tbody').innerHTML=rows.length
+    ?rows.map(r=>'<tr>'+showCols.map(c=>`<td>${escHtml(String(r[c.idx]??''))}</td>`).join('')+'</tr>').join('')
+    :'<tr><td colspan="'+showCols.length+'">No rows found for this queue.</td></tr>';
+}
+
+function closeImportModal(){document.getElementById('importModal').classList.add('hidden');_pendingImport=null;}
+
+function applyImport(){
+  const data=_pendingImport;if(!data)return;
+  const yearInput=+document.getElementById('importYearOverride').value;
+  const finalYear=yearInput||data.year;
+  const selQueue=document.getElementById('importQueueSelect').value;
+
+  // update base year if this is newer than current
+  if(finalYear&&(!APP.detectedBaseYear||finalYear>APP.detectedBaseYear)){
+    APP.detectedBaseYear=finalYear;
+  }
+
+  const yearDetected=!!finalYear;
+  showYearBanner(yearDetected);
+
+  // populate queue datalist
+  if(data.queues.length){
+    APP.detectedQueues=data.queues;
+    document.getElementById('queueDetectedList').innerHTML=data.queues.map(q=>`<option value="${escHtml(q)}">`).join('');
+    // pre-fill queue name if empty
+    const qn=document.getElementById('queueName');
+    if(!qn.value.trim()&&selQueue){qn.value=selQueue;APP.queue.name=selQueue;}
+  }
+
+  // auto-fill Y slot in each holiday if queue + volume col present
+  if(finalYear&&data.colMap.queueCol>=0&&data.colMap.volCol>=0&&selQueue&&APP.holidays.length){
+    const slot=getSlotForYear(finalYear);
+    if(slot){
+      const rows=data.dataRows.filter(r=>String(r[data.colMap.queueCol]||'').trim()===selQueue);
+      const totalVol=rows.reduce((a,r)=>{const v=parseFloat(String(r[data.colMap.volCol]||'').replace(/,/g,''));return a+(isNaN(v)?0:v);},0);
+      if(totalVol>0){
+        APP.holidays.forEach(h=>{
+          if(!h.years[slot])h.years[slot]=_emptyYear();
+          h.years[slot].actual.voice=Math.round(totalVol);
+          h.years[slot].year=String(finalYear);
+        });
+        renderHolidayList();
+        alert(`Auto-filled ${slot} (${getYearLabel(slot)}) actual voice volume = ${Math.round(totalVol).toLocaleString()} for all holidays. Review and adjust per-holiday on the Setup tab.`);
+      }
+    }
+  }
+
+  // re-render so labels update
+  if(APP.holidays.length)renderHolidayList();
+  closeImportModal();
 }
 function loadFromJSON(d){
+  // restore queue context (v2.0+)
+  if(d.queue){
+    document.getElementById('queueName').value=d.queue.name||'';
+    document.getElementById('queueRegion').value=d.queue.region||'';
+    document.getElementById('queueType').value=d.queue.type||'DB';
+    APP.queue=d.queue;
+  }
+  if(d.detectedBaseYear)APP.detectedBaseYear=d.detectedBaseYear;
   if(d.config){
     if(d.config.defaultOperatingHours){
       document.getElementById('defaultStart').value=d.config.defaultOperatingHours.start;
@@ -1497,10 +1897,13 @@ function loadFromJSON(d){
       nh.planSource=h.planSource||'WFM Forecast';nh.planVolume=h.planVolume||{voice:0,chat:0,email:0,blended:0};
       nh.operatingHoursOverride=h.operatingHours?.overridden||false;
       if(h.operatingHours)nh.operatingHours={start:h.operatingHours.start||'08:00',end:h.operatingHours.end||'20:00'};
-      if(h.historicalData){['Y1','Y2','Y3'].forEach(y=>{if(h.historicalData[y]){const yd=h.historicalData[y];
+      // support both legacy historicalData and direct years object
+      const src=h.historicalData||h.years;
+      if(src){YEAR_SLOTS.forEach(y=>{if(src[y]){const yd=src[y];
+        if(!nh.years[y])nh.years[y]=_emptyYear();
         nh.years[y].year=yd.year||'';
-        nh.years[y].actual=typeof yd.actualVolume==='object'?yd.actualVolume:{voice:yd.actualVolume||0,chat:0,email:0,blended:0};
-        nh.years[y].baseline=typeof yd.baselineVolume==='object'?yd.baselineVolume:{voice:yd.baselineVolume||0,chat:0,email:0,blended:0};
+        nh.years[y].actual=typeof yd.actualVolume==='object'?yd.actualVolume:(typeof yd.actual==='object'?yd.actual:{voice:yd.actualVolume||0,chat:0,email:0,blended:0});
+        nh.years[y].baseline=typeof yd.baselineVolume==='object'?yd.baselineVolume:(typeof yd.baseline==='object'?yd.baseline:{voice:yd.baselineVolume||0,chat:0,email:0,blended:0});
         if(yd.anomalyFlag&&yd.anomalySource==='manual')nh.manualAnomalyOverrides[y]=true;
       }});}
       return nh;
@@ -1509,7 +1912,9 @@ function loadFromJSON(d){
   hcCache={};updateShrinkage();validateBlendedSplit();validateAHT();renderHolidayList();
 }
 function exportData(){
-  downloadJSON({_exported:new Date().toISOString(),_version:'1.2',
+  downloadJSON({_exported:new Date().toISOString(),_version:'2.0',
+    queue:{name:document.getElementById('queueName').value,region:document.getElementById('queueRegion').value,type:document.getElementById('queueType').value},
+    detectedBaseYear:APP.detectedBaseYear,
     config:{defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd},
       defaultShrinkage:{plannedLeave:APP.config.shrink.pl,unplannedLeave:APP.config.shrink.ul,training:APP.config.shrink.tr,total:APP.config.shrink.total},
       serviceLevelTargets:{voice:{sl_pct:APP.config.sl.voicePct,sl_seconds:APP.config.sl.voiceSec},chat:{sl_pct:APP.config.sl.chatPct,sl_seconds:APP.config.sl.chatSec},email:{sl_pct:APP.config.sl.emailPct,sl_hours:APP.config.sl.emailHrs}},
@@ -1531,14 +1936,17 @@ function downloadJSON(obj,fn){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(obj,null,2)],{type:'application/json'}));a.download=fn;a.click();
 }
 
-/* FIX 9: resetAll clears shift rows from DOM */
 function resetAll(){
   if(!confirm('Reset all data and start a new plan?'))return;
-  APP.holidays=[];hcCache={};shiftEntries=[];
+  APP.holidays=[];APP.detectedBaseYear=null;APP.detectedQueues=[];hcCache={};shiftEntries=[];
   spSelectedChannels=new Set(['voice']);srSelectedChannels=new Set(['voice']);spActivePanelCh='voice';
-  renderHolidayList();
-  renderShiftRows();                                         // FIX 9: clear DOM immediately
-  switchTab(0);
+  document.getElementById('queueName').value='';
+  document.getElementById('queueRegion').value='';
+  document.getElementById('queueType').value='DB';
+  document.getElementById('queueDetectedList').innerHTML='';
+  document.getElementById('yearBanner').classList.remove('visible');
+  APP.queue={name:'',region:'',type:'DB'};
+  renderHolidayList();renderShiftRows();switchTab(0);
 }
 
 /* ================================================================
@@ -1564,6 +1972,7 @@ async function pingBackend(){
 window.addEventListener('DOMContentLoaded',()=>{
   updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();
   pingBackend();setInterval(pingBackend,15000);
+  initDB().catch(()=>{/* IndexedDB unavailable — save/load disabled */});
 });
 </script>
 </body>
