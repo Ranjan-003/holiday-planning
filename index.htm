@@ -355,58 +355,84 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
       <div class="card mb-4">
         <div class="card__header"><span class="card__title">Service level targets &amp; AHT</span></div>
         <div class="form-group mb-3">
-          <label class="form-label">Voice — % answered within (sec) · AHT (sec)</label>
-          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px;gap:var(--sp-2);align-items:center">
+          <label class="form-label">Voice — % answered within (sec) · AHT · Concurrency</label>
+          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px auto 90px;gap:var(--sp-2);align-items:center">
             <input type="number" id="slVoicePct" value="80" min="1" max="100" onchange="validateAHT();invalidateAllCaches()">
             <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
             <input type="number" id="slVoiceSec" value="20" min="1" onchange="invalidateAllCaches()">
             <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
-            <input type="number" id="ahtVoice" value="360" min="1" oninput="validateAHT();invalidateAllCaches()">
+            <input type="number" id="ahtVoice" value="6" min="0.01" step="0.01" aria-label="Voice AHT value" oninput="onAHTInput('voice');validateAHT();invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)" aria-hidden="true">unit</span>
+            <select id="ahtVoiceUnit" style="height:36px" aria-label="Voice AHT unit" onchange="onAHTUnitChange('voice')">
+              <option value="60" selected>Minutes</option>
+              <option value="1">Seconds</option>
+              <option value="3600">Hours</option>
+            </select>
           </div>
         </div>
         <div class="form-group mb-3">
-          <label class="form-label">Chat — % answered within (sec) · AHT (sec) · Concurrency</label>
-          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px auto 60px;gap:var(--sp-2);align-items:center">
+          <label class="form-label">Chat — % answered within (sec) · AHT · Concurrency</label>
+          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px auto 90px auto 60px;gap:var(--sp-2);align-items:center">
             <input type="number" id="slChatPct" value="90" min="1" max="100" onchange="invalidateAllCaches()">
             <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
             <input type="number" id="slChatSec" value="30" min="1" onchange="invalidateAllCaches()">
             <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
-            <input type="number" id="ahtChat" value="480" min="1" oninput="validateAHT();invalidateAllCaches()">
+            <input type="number" id="ahtChat" value="8" min="0.01" step="0.01" aria-label="Chat AHT value (default: 8 min)" title="Chat AHT — default: 8 min (480 s)" oninput="onAHTInput('chat');validateAHT();invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)" aria-hidden="true">unit</span>
+            <select id="ahtChatUnit" style="height:36px" aria-label="Chat AHT unit" onchange="onAHTUnitChange('chat')">
+              <option value="60" selected>Minutes</option>
+              <option value="1">Seconds</option>
+              <option value="3600">Hours</option>
+            </select>
             <span class="text-faint" style="font-size:var(--text-sm)">Conc.</span>
             <input type="number" id="chatConcurrency" value="2.5" min="1" max="10" step="0.5" onchange="invalidateAllCaches()">
           </div>
+          <div class="text-faint" style="font-size:var(--text-xs);margin-top:var(--sp-1)">AHT default: 8 min (480 s)</div>
         </div>
         <!-- FIX 2: Separate email occupancy from SL% -->
         <div class="form-group mb-3">
-          <label class="form-label">Email — % responded within (hrs) · AHT (sec) · Occupancy %</label>
-          <div style="display:grid;grid-template-columns:55px auto 55px auto 80px auto 60px;gap:var(--sp-2);align-items:center">
+          <label class="form-label">Email — % responded within (hrs) · AHT · Occupancy %</label>
+          <div style="display:grid;grid-template-columns:55px auto 55px auto 80px auto 90px auto 60px;gap:var(--sp-2);align-items:center">
             <input type="number" id="slEmailPct" value="95" min="1" max="100" onchange="invalidateAllCaches()">
             <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
             <input type="number" id="slEmailHrs" value="4" min="1" onchange="invalidateAllCaches()">
             <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
-            <input type="number" id="ahtEmail" value="600" min="1" oninput="validateAHT();invalidateAllCaches()">
+            <input type="number" id="ahtEmail" value="10" min="0.01" step="0.01" aria-label="Email AHT value (default: 10 min)" title="Email AHT — default: 10 min (600 s)" oninput="onAHTInput('email');validateAHT();invalidateAllCaches()">
+            <span class="text-faint" style="font-size:var(--text-sm)" aria-hidden="true">unit</span>
+            <select id="ahtEmailUnit" style="height:36px" aria-label="Email AHT unit" onchange="onAHTUnitChange('email')">
+              <option value="60" selected>Minutes</option>
+              <option value="1">Seconds</option>
+              <option value="3600">Hours</option>
+            </select>
             <span class="text-faint" style="font-size:var(--text-sm)">Occ.</span>
             <input type="number" id="emailOccupancy" value="75" min="20" max="99" onchange="validateEmailOccupancy()">
           </div>
+          <div class="text-faint" style="font-size:var(--text-xs);margin-top:var(--sp-1)">AHT default: 10 min (600 s)</div>
           <div class="alert alert--info mt-2"><small>Email occupancy is separate from SL%. SL% tracks response time; occupancy targets agent utilisation.</small></div>
         </div>
         <div id="ahtError" class="form-error hidden">AHT must be at least 1 second for all channels.</div>
-        <!-- FIX 3: Blended split configuration -->
+        <!-- FIX 3: Blended split configuration — three-way Voice/Chat/Email -->
         <div class="form-group">
-          <label class="form-label">Blended channel — voice/chat split %</label>
-          <div style="display:grid;grid-template-columns:1fr auto 1fr;gap:var(--sp-3);align-items:center">
+          <label class="form-label">Blended channel — voice / chat / email split %</label>
+          <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:var(--sp-3);align-items:center">
             <div>
               <label style="font-size:10px;color:var(--ch-voice)">Voice %</label>
-              <input type="number" id="blendedVoicePct" value="60" min="0" max="100" oninput="validateBlendedSplit();invalidateAllCaches()">
+              <input type="number" id="blendedVoicePct" value="50" min="0" max="100" oninput="validateBlendedSplit();invalidateAllCaches()">
             </div>
             <span class="text-faint" style="font-size:var(--text-sm);text-align:center">+</span>
             <div>
               <label style="font-size:10px;color:var(--ch-chat)">Chat %</label>
-              <input type="number" id="blendedChatPct" value="40" min="0" max="100" oninput="validateBlendedSplit();invalidateAllCaches()">
+              <input type="number" id="blendedChatPct" value="30" min="0" max="100" oninput="validateBlendedSplit();invalidateAllCaches()">
+            </div>
+            <span class="text-faint" style="font-size:var(--text-sm);text-align:center">+</span>
+            <div>
+              <label style="font-size:10px;color:var(--ch-email)">Email %</label>
+              <input type="number" id="blendedEmailPct" value="20" min="0" max="100" readonly style="background:var(--surface-sunken);color:var(--text-secondary)">
             </div>
           </div>
-          <div id="blendedSplitError" class="form-error hidden">Voice % + Chat % must equal 100.</div>
-          <div id="blendedSplitOk" class="alert alert--success mt-2 hidden"><small>Split: <span id="blendedSplitLabel">60% voice · 40% chat</span></small></div>
+          <div class="alert alert--info mt-2" style="font-size:var(--text-xs)"><small>Email % auto-adjusts as the remainder (100 − Voice − Chat). Adjust Voice and Chat to set the split.</small></div>
+          <div id="blendedSplitError" class="form-error hidden">Voice % + Chat % must not exceed 100.</div>
+          <div id="blendedSplitOk" class="alert alert--success mt-2 hidden"><small>Split: <span id="blendedSplitLabel">50% voice · 30% chat · 20% email</span></small></div>
         </div>
       </div>
 
@@ -649,8 +675,9 @@ let APP={
     aht:{voice:360,chat:480,email:600},
     concurrency:2.5,
     emailOccupancy:75,
-    blendedVoicePct:60,
-    blendedChatPct:40,
+    blendedVoicePct:50,
+    blendedChatPct:30,
+    blendedEmailPct:20,
     anomalyThreshold:2
   },
   backendOnline:false
@@ -948,13 +975,22 @@ function restoreFormFromConfig(){
   document.getElementById('shrinkPL').value=shrinkVal(cfg.shrink?.pl,'pl',0);
   document.getElementById('shrinkUL').value=shrinkVal(cfg.shrink?.ul,'ul',0);
   document.getElementById('shrinkTR').value=shrinkVal(cfg.shrink?.tr,'tr',0);
-  document.getElementById('ahtVoice').value=cfg.aht?.voice??360;
-  document.getElementById('ahtChat').value=cfg.aht?.chat??480;
-  document.getElementById('ahtEmail').value=cfg.aht?.email??600;
+  // AHT restore: update stored-seconds state, then convert to current display unit
+  _ahtSeconds.voice=cfg.aht?.voice??360;
+  _ahtSeconds.chat=cfg.aht?.chat??480;
+  _ahtSeconds.email=cfg.aht?.email??600;
+  // Display in current unit (Minutes by default — divisor 60)
+  document.getElementById('ahtVoice').value=parseFloat((_ahtSeconds.voice/_ahtDivisor('voice')).toFixed(6));
+  document.getElementById('ahtChat').value=parseFloat((_ahtSeconds.chat/_ahtDivisor('chat')).toFixed(6));
+  document.getElementById('ahtEmail').value=parseFloat((_ahtSeconds.email/_ahtDivisor('email')).toFixed(6));
   document.getElementById('chatConcurrency').value=cfg.concurrency??2.5;
   document.getElementById('emailOccupancy').value=cfg.emailOccupancy??75;
-  document.getElementById('blendedVoicePct').value=cfg.blendedVoicePct??60;
-  document.getElementById('blendedChatPct').value=cfg.blendedChatPct??40;
+  document.getElementById('blendedVoicePct').value=cfg.blendedVoicePct??50;
+  document.getElementById('blendedChatPct').value=cfg.blendedChatPct??30;
+  // blendedEmailPct is read-only (auto-remainder) — call validateBlendedSplit() immediately
+  // after all three split inputs are populated so that APP.config.blendedEmailPct is synced
+  // and the sum guard in computeNetHC() sees a consistent state before any HC computation.
+  validateBlendedSplit();
   document.getElementById('slVoicePct').value=cfg.sl?.voicePct??80;
   document.getElementById('slVoiceSec').value=cfg.sl?.voiceSec??20;
   document.getElementById('slChatPct').value=cfg.sl?.chatPct??90;
@@ -1312,20 +1348,88 @@ function validateOpHours(){
    FIX 2 & 3: Blended split & AHT validation
 ================================================================ */
 function validateBlendedSplit(){
-  const v=+document.getElementById('blendedVoicePct').value||0;
-  const c=+document.getElementById('blendedChatPct').value||0;
+  const v=Math.max(0,Math.min(100,+document.getElementById('blendedVoicePct').value||0));
+  const c=Math.max(0,Math.min(100,+document.getElementById('blendedChatPct').value||0));
   const errEl=document.getElementById('blendedSplitError');
   const okEl=document.getElementById('blendedSplitOk');
-  if(Math.abs(v+c-100)>0.01){errEl.classList.remove('hidden');okEl.classList.add('hidden');}
-  else{errEl.classList.add('hidden');okEl.classList.remove('hidden');document.getElementById('blendedSplitLabel').textContent=`${v}% voice · ${c}% chat`;}
-  APP.config.blendedVoicePct=v;APP.config.blendedChatPct=c;
+  // Email% is auto-adjusted as remainder: Email = 100 - Voice - Chat
+  // Clamp to [0,100] to handle edge cases where Voice+Chat > 100
+  const e=Math.max(0,Math.round((100-v-c)*100)/100);
+  const emailInput=document.getElementById('blendedEmailPct');
+  if(emailInput)emailInput.value=e;
+  if(v+c>100){
+    errEl.classList.remove('hidden');
+    okEl.classList.add('hidden');
+  } else {
+    errEl.classList.add('hidden');
+    okEl.classList.remove('hidden');
+    document.getElementById('blendedSplitLabel').textContent=`${v}% voice · ${c}% chat · ${e}% email`;
+  }
+  APP.config.blendedVoicePct=v;
+  APP.config.blendedChatPct=c;
+  APP.config.blendedEmailPct=e;
+}
+/* ================================================================
+   AHT UNIT SELECTOR HELPERS
+   _ahtSeconds stores the canonical AHT value in seconds for each
+   channel. The DOM input displays the value in the selected unit.
+   All calculation paths use _ahtSeconds, never raw DOM .value.
+================================================================ */
+const _ahtSeconds={voice:360,chat:480,email:600};
+function _ahtDivisor(ch){
+  // Build unit select ID: e.g. 'voice' → 'ahtVoiceUnit', 'chat' → 'ahtChatUnit'
+  const unitId='aht'+ch.charAt(0).toUpperCase()+ch.slice(1)+'Unit';
+  const unitSel=document.getElementById(unitId);
+  return unitSel?+unitSel.value:60; // default Minutes (divisor 60)
+}
+function onAHTInput(ch){
+  const inputId='aht'+ch.charAt(0).toUpperCase()+ch.slice(1);
+  const rawStr=document.getElementById(inputId).value;
+  const rawVal=parseFloat(rawStr);
+  // If the field is blank or non-numeric, do NOT overwrite the last valid stored
+  // seconds — leave _ahtSeconds[ch] unchanged so that a unit-change after clearing
+  // the field still displays the correct converted value instead of 0.0167 min.
+  // The error banner is surfaced here so the user sees feedback immediately on blank/zero entry.
+  const errEl=document.getElementById('ahtError');
+  if(rawStr===''||isNaN(rawVal)||rawVal<=0){
+    if(errEl){errEl.classList.remove('hidden');}
+    // stored seconds unchanged — retain last valid value
+    return;
+  }
+  const divisor=_ahtDivisor(ch);
+  // stored seconds = displayed value × divisor, clamped to minimum 1s
+  const seconds=Math.max(1,Math.round(rawVal*divisor*1000)/1000);
+  _ahtSeconds[ch]=seconds;
+  APP.config.aht[ch]=seconds;
+}
+
+function onAHTUnitChange(ch){
+  const inputId='aht'+ch.charAt(0).toUpperCase()+ch.slice(1);
+  const inputEl=document.getElementById(inputId);
+  if(!inputEl)return;
+  const divisor=_ahtDivisor(ch);
+  // Convert stored seconds → displayed value in new unit
+  const storedSec=_ahtSeconds[ch]||APP.config.aht[ch]||1;
+  const displayedVal=parseFloat((storedSec/divisor).toFixed(6));
+  inputEl.value=displayedVal;
+  // stored seconds unchanged — only display updates
 }
 function validateAHT(){
-  const v=+document.getElementById('ahtVoice').value;
-  const c=+document.getElementById('ahtChat').value;
-  const e=+document.getElementById('ahtEmail').value;
+  // Primary check: stored seconds (canonical internal value, always >= 1 after onAHTInput clamp).
+  const v=_ahtSeconds.voice||APP.config.aht.voice||0;
+  const c=_ahtSeconds.chat||APP.config.aht.chat||0;
+  const e=_ahtSeconds.email||APP.config.aht.email||0;
+  // Secondary check: raw DOM displayed value. onAHTInput clamps to >= 1s internally, so
+  // the stored value is always >= 1 — the error would never fire from the stored-value
+  // check alone after a zero-entry. We check the displayed value independently to catch
+  // zero entries. A zero display value means the user has entered 0 (or cleared the field)
+  // and the model is silently using 1s; we must surface the error.
+  const rawVoice=+document.getElementById('ahtVoice').value;
+  const rawChat=+document.getElementById('ahtChat').value;
+  const rawEmail=+document.getElementById('ahtEmail').value;
+  const displayInvalid=(isNaN(rawVoice)||rawVoice<=0)||(isNaN(rawChat)||rawChat<=0)||(isNaN(rawEmail)||rawEmail<=0);
   const errEl=document.getElementById('ahtError');
-  if(v<1||c<1||e<1){errEl.classList.remove('hidden');}
+  if(v<1||c<1||e<1||displayInvalid){errEl.classList.remove('hidden');}
   else{errEl.classList.add('hidden');}
   APP.config.aht={voice:Math.max(1,v),chat:Math.max(1,c),email:Math.max(1,e)};
 }
@@ -1390,7 +1494,7 @@ function distributeVolume(dailyVol,startTime,endTime,intervalMins=30){
    Voice and Chat are computed per 30-min interval from the interval
    call rate. Blended splits voice+chat per interval.
 ================================================================ */
-function computeNetHC(cph,channel,opStart,opEnd){
+function computeNetHC(cph,channel,opStart,opEnd,blendedEmailNetHCFlat){
   const cfg=APP.config;
   if(channel==='voice')return agentsForSL(cph,cfg.aht.voice,cfg.sl.voicePct,cfg.sl.voiceSec);
   if(channel==='chat'){
@@ -1421,12 +1525,42 @@ function computeNetHC(cph,channel,opStart,opEnd){
   // email: this path should not be reached at interval level — use computeEmailDailyNetHC instead
   // Kept as fallback only; returns 0 to surface mis-use
   if(channel==='email')return 0;
-  // Blended: configurable voice/chat split applied per interval
+  // Blended: configurable voice/chat/email three-way split applied per interval.
+  // Voice: Erlang C per interval. Chat: concurrency model per interval.
+  // Email: daily throughput spread flat — precomputed by computeIntervals() and passed as 4th arg.
+  // The fourth argument blendedEmailNetHCFlat is only used by the blended path; all other channels ignore it.
+  // GUARD: if Voice% + Chat% > 100 (invalid split), return 0 — do not compute inflated HC.
+  // validateBlendedSplit() shows a UI error in this state, but computeNetHC() must also
+  // short-circuit so that gap analysis and shift recommendation receive 0 rather than a
+  // double-counted HC figure. Tolerance of 0.01 accommodates decimal splits (e.g. 33.33/33.34).
+  const _vRaw=cfg.blendedVoicePct||0;
+  const _cRaw=cfg.blendedChatPct||0;
+  if(Math.abs((_vRaw+_cRaw)-100)>0.01&&(_vRaw+_cRaw)>100)return 0;
+  // Edge cases:
+  //   100/0/0  → pure Erlang C (voice-only result)
+  //   0/100/0  → pure concurrency (chat-only result)
+  //   0/0/100  → blendedEmailNetHCFlat is the full email HC (spread flat), all voice/chat = 0
+  //   0/0/0    → returns 0 (no split configured)
   const vPct=cfg.blendedVoicePct/100;
   const cPct=cfg.blendedChatPct/100;
-  const vNet=agentsForSL(cph*vPct,cfg.aht.voice,cfg.sl.voicePct,cfg.sl.voiceSec);
-  const cNet=Math.max(1,Math.ceil(((cph*cPct/3600)*cfg.aht.chat)/cfg.concurrency));
-  return Math.max(1,vNet+cNet);
+  const ePct=(cfg.blendedEmailPct||0)/100;
+  const vNet=vPct>0?agentsForSL(cph*vPct,cfg.aht.voice,cfg.sl.voicePct,cfg.sl.voiceSec):0;
+  // Chat sub-component: no floor of 1 applied here. The Math.max(1,...) floor is
+  // intentionally absent on the sub-component because near-zero chat load (e.g. cph=1,
+  // Chat%=30% → load ≈ 0.00004 sessions → ceil = 0) produces zero contribution, which
+  // is the correct result. A floor of 1 on the sub-component would inflate blended net
+  // HC by +1 at every low-volume interval where any non-zero Chat% is configured.
+  // The total blended HC still receives a floor of 1 via Math.max(1,...) at the return.
+  const cNet=cPct>0&&cph>0?Math.ceil(((cph*cPct/3600)*cfg.aht.chat)/cfg.concurrency):0;
+  // blendedEmailNetHCFlat: precomputed email HC for the email portion of daily volume (dailyVol * ePct),
+  // spread flat across all intervals. Passed as 5th argument from computeIntervals().
+  // ePct is clamped to >= 0 before use to prevent a negative daily volume being passed
+  // to computeEmailDailyNetHC() if floating-point arithmetic produces e.g. -0.00 when
+  // Voice% + Chat% sum to exactly 100 with sub-digit rounding in validateBlendedSplit().
+  const safeEPct=Math.max(0,ePct);
+  const eNet=safeEPct>0?blendedEmailNetHCFlat:0;
+  if(vPct+cPct+safeEPct<=0)return 0;
+  return Math.max(1,vNet+cNet+eNet);
 }
 /* Email daily throughput model:
    throughput = (opHours * 3600 * occupancy%) / AHT
@@ -1465,13 +1599,31 @@ function grossHC(net,shrinkPct){
 function computeIntervals(dailyVol,channel,opStart,opEnd){
   const intervals=distributeVolume(dailyVol,opStart,opEnd,30);
   const shrink=APP.config.shrink.total;
+  const cfg=APP.config;
   // Email: compute net HC once at daily level, spread flat across intervals (Issue 1)
   const emailNetHCDaily=channel==='email'?computeEmailDailyNetHC(dailyVol,opStart,opEnd):null;
+  // Blended email portion: compute email HC based on (dailyVol × ePct) at day level.
+  // Spread flat across all blended intervals. This mirrors the pure email channel behaviour
+  // (batch model: one flat HC figure per day) and avoids dividing by zero at zero-volume intervals.
+  let blendedEmailNetHCFlat=0;
+  if(channel==='blended'){
+    // Clamp to >= 0 to guard against floating-point edge case where Voice%+Chat% rounding
+    // produces a tiny negative remainder (e.g. -0.00) instead of 0.00. A negative ePct
+    // would pass a negative dailyVol into computeEmailDailyNetHC(), bypassing its
+    // dailyVol<=0 guard if the sign is -0.00 (IEEE 754 negative zero is <= 0, so guarded
+    // correctly; but a true negative like -0.001 would not be caught). Explicit clamp here
+    // eliminates any ambiguity regardless of how the remainder is computed upstream.
+    const ePct=Math.max(0,(cfg.blendedEmailPct||0)/100);
+    if(ePct>0)blendedEmailNetHCFlat=computeEmailDailyNetHC(dailyVol*ePct,opStart,opEnd);
+  }
   let hitCap=false;
   const result=intervals.map(iv=>{
     let net;
     if(channel==='email'){
       net=emailNetHCDaily;
+    } else if(channel==='blended'){
+      // Pass precomputed email flat HC as 4th argument for the blended path in computeNetHC
+      net=computeNetHC(iv.callsPerHour,channel,opStart,opEnd,blendedEmailNetHCFlat);
     } else {
       net=computeNetHC(iv.callsPerHour,channel,opStart,opEnd);
     }
@@ -1497,13 +1649,20 @@ function invalidateAllCaches(){
   cfg.sl.chatSec=+document.getElementById('slChatSec').value;
   cfg.sl.emailPct=+document.getElementById('slEmailPct').value;
   cfg.sl.emailHrs=+document.getElementById('slEmailHrs').value;
-  cfg.aht.voice=Math.max(1,+document.getElementById('ahtVoice').value||360);
-  cfg.aht.chat=Math.max(1,+document.getElementById('ahtChat').value||480);
-  cfg.aht.email=Math.max(1,+document.getElementById('ahtEmail').value||600);
+  // AHT: always read from stored-seconds state, not raw DOM value (which may be in Minutes/Hours)
+  cfg.aht.voice=Math.max(1,_ahtSeconds.voice||360);
+  cfg.aht.chat=Math.max(1,_ahtSeconds.chat||480);
+  cfg.aht.email=Math.max(1,_ahtSeconds.email||600);
   cfg.concurrency=+document.getElementById('chatConcurrency').value||2.5;
   cfg.emailOccupancy=+document.getElementById('emailOccupancy').value||75;
-  cfg.blendedVoicePct=+document.getElementById('blendedVoicePct').value||60;
-  cfg.blendedChatPct=+document.getElementById('blendedChatPct').value||40;
+  const _bv=+document.getElementById('blendedVoicePct').value||0;
+  const _bc=+document.getElementById('blendedChatPct').value||0;
+  // Math.round to 2dp then Math.max(0,...) prevents floating-point remainder like -0.00
+  // or -0.001 from reaching computeEmailDailyNetHC() as a negative daily volume.
+  const _be=Math.max(0,Math.round((100-_bv-_bc)*100)/100);
+  cfg.blendedVoicePct=_bv;
+  cfg.blendedChatPct=_bc;
+  cfg.blendedEmailPct=_be;
 }
 function invalidateHCCache(){hcCache={};}
 function invalidateCombinationCache(hid){const h=APP.holidays.find(x=>x.id===hid);if(h){h.combinations={};}}
@@ -1702,12 +1861,9 @@ function renderHolidayList(resetPage){
             <input type="number" value="${(h.years[y]&&h.years[y].actual[ch])||0}"
               oninput="setHVal('${h.id}','years.${y}.actual.${ch}',+this.value)">
           </div>`).join('')}
-          <label style="font-size:10px;color:var(--text-tertiary);margin-top:4px;display:block">Baseline volume</label>
-          ${CHANNELS.map(ch=>`<div style="margin-bottom:4px">
-            <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
-            <input type="number" value="${(h.years[y]&&h.years[y].baseline[ch])||0}"
-              oninput="setHVal('${h.id}','years.${y}.baseline.${ch}',+this.value)">
-          </div>`).join('')}
+          <!-- Baseline volume inputs removed from Tab 1 UI. Baseline data persists in
+               h.years[y].baseline[ch] for anomaly detection and impact % on Tab 2.
+               Baseline can be imported via CSV/XLS upload (importHolidayFile). -->
           <button type="button" class="dvg-toggle${anyEntered?' open':''}" id="dvg_toggle_${h.id}_${slotKey}"
             onclick="toggleDVG('${h.id}','${slotKey}')">
             <i class="dvg-toggle__arrow">&#9654;</i>
@@ -3661,10 +3817,33 @@ function loadFromJSON(d){
       APP.config.shrink={pl,ul,tr,total:compoundShrinkage(pl,ul,tr)};
     }
     if(d.config.channelParams){
-      if(d.config.channelParams.voice)document.getElementById('ahtVoice').value=d.config.channelParams.voice.aht_seconds||360;
-      if(d.config.channelParams.chat){document.getElementById('ahtChat').value=d.config.channelParams.chat.aht_seconds||480;document.getElementById('chatConcurrency').value=d.config.channelParams.chat.concurrency||2.5;}
-      if(d.config.channelParams.email){document.getElementById('ahtEmail').value=d.config.channelParams.email.aht_seconds||600;if(d.config.channelParams.email.occupancy_pct)document.getElementById('emailOccupancy').value=d.config.channelParams.email.occupancy_pct;}
-      if(d.config.channelParams.blended){document.getElementById('blendedVoicePct').value=d.config.channelParams.blended.voice_pct||60;document.getElementById('blendedChatPct').value=d.config.channelParams.blended.chat_pct||40;}
+      if(d.config.channelParams.voice){
+        const _vs=d.config.channelParams.voice.aht_seconds||360;
+        _ahtSeconds.voice=_vs;
+        document.getElementById('ahtVoice').value=parseFloat((_vs/_ahtDivisor('voice')).toFixed(6));
+      }
+      if(d.config.channelParams.chat){
+        const _cs=d.config.channelParams.chat.aht_seconds||480;
+        _ahtSeconds.chat=_cs;
+        document.getElementById('ahtChat').value=parseFloat((_cs/_ahtDivisor('chat')).toFixed(6));
+        document.getElementById('chatConcurrency').value=d.config.channelParams.chat.concurrency||2.5;
+      }
+      if(d.config.channelParams.email){
+        const _es=d.config.channelParams.email.aht_seconds||600;
+        _ahtSeconds.email=_es;
+        document.getElementById('ahtEmail').value=parseFloat((_es/_ahtDivisor('email')).toFixed(6));
+        if(d.config.channelParams.email.occupancy_pct)document.getElementById('emailOccupancy').value=d.config.channelParams.email.occupancy_pct;
+      }
+      if(d.config.channelParams.blended){
+        document.getElementById('blendedVoicePct').value=d.config.channelParams.blended.voice_pct||50;
+        document.getElementById('blendedChatPct').value=d.config.channelParams.blended.chat_pct||30;
+        // Immediately sync APP.config.blendedEmailPct to the auto-remainder so that any
+        // code path triggered between here and restoreFormFromConfig() (e.g. updateQueueGate
+        // or renderHolidayList calling computeIntervals indirectly) reads a fresh value
+        // rather than the stale pre-import blendedEmailPct. validateBlendedSplit() is also
+        // called in restoreFormFromConfig() but the immediate call here closes the race window.
+        validateBlendedSplit();
+      }
     }
   }
   if(d.holidays){
@@ -3737,12 +3916,12 @@ function exportData(){
     config:{defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd},
       defaultShrinkage:{plannedLeave:APP.config.shrink.pl,unplannedLeave:APP.config.shrink.ul,training:APP.config.shrink.tr,total:APP.config.shrink.total},
       serviceLevelTargets:{voice:{sl_pct:APP.config.sl.voicePct,sl_seconds:APP.config.sl.voiceSec},chat:{sl_pct:APP.config.sl.chatPct,sl_seconds:APP.config.sl.chatSec},email:{sl_pct:APP.config.sl.emailPct,sl_hours:APP.config.sl.emailHrs}},
-      channelParams:{voice:{aht_seconds:APP.config.aht.voice},chat:{aht_seconds:APP.config.aht.chat,concurrency:APP.config.concurrency},email:{aht_seconds:APP.config.aht.email,occupancy_pct:APP.config.emailOccupancy},blended:{voice_pct:APP.config.blendedVoicePct,chat_pct:APP.config.blendedChatPct}}},
+      channelParams:{voice:{aht_seconds:APP.config.aht.voice},chat:{aht_seconds:APP.config.aht.chat,concurrency:APP.config.concurrency},email:{aht_seconds:APP.config.aht.email,occupancy_pct:APP.config.emailOccupancy},blended:{voice_pct:APP.config.blendedVoicePct,chat_pct:APP.config.blendedChatPct,email_pct:APP.config.blendedEmailPct}}},
     holidays:APP.holidays},`holiday_plan_${new Date().toISOString().slice(0,10)}.json`);
 }
 function exportFinalPlan(){
   downloadJSON({_type:'final_plan',_exported:new Date().toISOString(),_version:'2.0',
-    config:{shrinkage:APP.config.shrink,serviceLevelTargets:APP.config.sl,aht:APP.config.aht,concurrency:APP.config.concurrency,emailOccupancy:APP.config.emailOccupancy,blendedSplit:{voice:APP.config.blendedVoicePct,chat:APP.config.blendedChatPct},defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd}},
+    config:{shrinkage:APP.config.shrink,serviceLevelTargets:APP.config.sl,aht:APP.config.aht,concurrency:APP.config.concurrency,emailOccupancy:APP.config.emailOccupancy,blendedSplit:{voice:APP.config.blendedVoicePct,chat:APP.config.blendedChatPct,email:APP.config.blendedEmailPct},defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd}},
     holidays:APP.holidays.map(h=>({name:h.name,date:h.date,planSource:h.planSource,channels:h.channels,
       selectedCombinations:h.selectedCombos,
       peakHC:(()=>{
@@ -3870,6 +4049,9 @@ window.addEventListener('DOMContentLoaded',()=>{
     const primary=getComputedStyle(document.documentElement).getPropertyValue('--color-primary-600').trim();
     if(primary)logoRect.setAttribute('fill',primary);
   }
+  // Sync _ahtSeconds from DOM defaults (DOM is pre-populated with Minutes values).
+  // onAHTInput reads the displayed value and converts to seconds using the current unit divisor.
+  onAHTInput('voice');onAHTInput('chat');onAHTInput('email');
   updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();validateEmailOccupancy();
   updateQueueGate();
   renderHCChannelPicker();buildHCPanelTabs();
