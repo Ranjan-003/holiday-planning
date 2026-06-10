@@ -109,19 +109,31 @@
 /* ── Holiday upload strip ── */
 .holiday-upload-strip{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--surface-sunken);border-radius:var(--radius-md);border:1px solid var(--border-subtle);margin-bottom:var(--sp-4)}
 .holiday-upload-strip .t-caption{flex:1}
-/* ── Daily volume grid (7-day expandable per year slot) ── */
+/* ── Historical data 2-column grid layout ── */
+.hist-data-grid{display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)}
+/* ── Daily volume grid (7-day expandable per year slot, per-channel sub-grid) ── */
 .dvg-toggle{display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;padding:var(--sp-2) 0;border:none;background:none;font-family:var(--font-sans);font-size:var(--text-xs);color:var(--text-secondary);font-weight:var(--weight-medium);width:100%;text-align:left;transition:color var(--transition-fast)}
 .dvg-toggle:hover{color:var(--text-primary)}
 .dvg-toggle__arrow{display:inline-block;transition:transform var(--transition-fast);font-style:normal;font-size:9px;opacity:.6}
 .dvg-toggle.open .dvg-toggle__arrow{transform:rotate(90deg)}
 .dvg-grid{display:none;margin-top:var(--sp-2)}
 .dvg-grid.open{display:block}
-.dvg-row{display:grid;grid-template-columns:repeat(7,1fr) 80px;gap:var(--sp-1);align-items:end}
-.dvg-row__head{display:grid;grid-template-columns:repeat(7,1fr) 80px;gap:var(--sp-1);margin-bottom:2px}
+/* Per-channel sub-grid: [Day label | Voice | Chat | Email] */
+.dvg-ch-head{display:grid;grid-template-columns:40px 1fr 1fr 1fr;gap:var(--sp-1);margin-bottom:2px}
+.dvg-ch-row{display:grid;grid-template-columns:40px 1fr 1fr 1fr;gap:var(--sp-1);align-items:center;margin-bottom:var(--sp-1)}
+.dvg-day-label{font-size:9px;color:var(--text-secondary);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;height:26px}
 .dvg-col-label{font-size:9px;color:var(--text-tertiary);text-align:center;font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.04em}
+.dvg-col-label--voice{color:var(--ch-voice)}
+.dvg-col-label--chat{color:var(--ch-chat)}
+.dvg-col-label--email{color:var(--ch-email)}
 .dvg-col-label--total{color:var(--text-secondary)}
 .dvg-input{height:26px;font-size:var(--text-xs);font-family:var(--font-mono);text-align:center;padding:0 var(--sp-1)}
 .dvg-total{height:26px;font-size:var(--text-xs);font-family:var(--font-mono);text-align:center;padding:0 var(--sp-1);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--text-secondary);display:flex;align-items:center;justify-content:center}
+/* Per-channel week totals row */
+.dvg-ch-totals{display:grid;grid-template-columns:40px 1fr 1fr 1fr;gap:var(--sp-1);margin-top:var(--sp-2);padding-top:var(--sp-2);border-top:1px solid var(--border-subtle)}
+/* Volume mismatch warning */
+.dvg-mismatch-warn{background:var(--color-amber-50);border:1px solid var(--color-amber-100);border-radius:var(--radius-md);padding:var(--sp-2) var(--sp-3);font-size:var(--text-xs);color:var(--color-amber-700);margin-top:var(--sp-2);display:none}
+.dvg-mismatch-warn.visible{display:block}
 /* ── HC channel multi-select (replaces dropdown in tab 6) ── */
 .hc-ch-multiselect{display:flex;gap:var(--sp-2);flex-wrap:wrap;margin-top:var(--sp-2)}
 /* ── Shrinkage individual-component warning ── */
@@ -427,11 +439,11 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
             <span class="text-faint" style="font-size:var(--text-sm);text-align:center">+</span>
             <div>
               <label style="font-size:10px;color:var(--ch-email)">Email %</label>
-              <input type="number" id="blendedEmailPct" value="20" min="0" max="100" readonly style="background:var(--surface-sunken);color:var(--text-secondary)">
+              <input type="number" id="blendedEmailPct" min="0" max="100" oninput="validateBlendedSplit();invalidateAllCaches()">
             </div>
           </div>
-          <div class="alert alert--info mt-2" style="font-size:var(--text-xs)"><small>Email % auto-adjusts as the remainder (100 − Voice − Chat). Adjust Voice and Chat to set the split.</small></div>
-          <div id="blendedSplitError" class="form-error hidden">Voice % + Chat % must not exceed 100.</div>
+          <div class="alert alert--info mt-2" style="font-size:var(--text-xs)"><small>Email % auto-adjusts as the remainder (100 − Voice − Chat). You can also type directly in the Email field — Voice and Chat will be scaled to preserve the sum of 100.</small></div>
+          <div id="blendedSplitError" class="form-error hidden">Voice + Chat + Email must sum to 100. Adjust values so no pair exceeds 100.</div>
           <div id="blendedSplitOk" class="alert alert--success mt-2 hidden"><small>Split: <span id="blendedSplitLabel">50% voice · 30% chat · 20% email</span></small></div>
         </div>
       </div>
@@ -800,21 +812,21 @@ async function restoreQueuePlan(planKey){
   APP.detectedBaseYear=p.detectedBaseYear||null;
   // Restore holidays with dailyVolumes/holidayDowSplit migration for plans saved before this feature.
   APP.holidays=(p.holidays||[]).map(h=>{
-    // Ensure dailyVolumes exists with correct structure
+    // Ensure dailyVolumes exists with correct per-channel structure.
+    // migrateDailyVolumes handles: missing field, legacy flat arrays, partially-structured objects.
     if(!h.dailyVolumes||typeof h.dailyVolumes!=='object'){
-      const dv={};YEAR_SLOTS.forEach(y=>{dv[y.toLowerCase()]=[null,null,null,null,null,null,null];});
+      const dv={};YEAR_SLOTS.forEach(y=>{dv[y.toLowerCase()]=_emptyDVSlot();});
       h.dailyVolumes=dv;
     } else {
       YEAR_SLOTS.forEach(y=>{
         const slotKey=y.toLowerCase();
-        if(!Array.isArray(h.dailyVolumes[slotKey])){h.dailyVolumes[slotKey]=[null,null,null,null,null,null,null];}
-        else{const padded=h.dailyVolumes[slotKey].slice(0,7);while(padded.length<7)padded.push(null);h.dailyVolumes[slotKey]=padded;}
+        h.dailyVolumes[slotKey]=migrateDailyVolumes(h.dailyVolumes[slotKey]);
       });
     }
     // Validate and migrate holidayDowSplit.
-    // v2.0 stores holidayDowSplit as a per-slot map {y1:null|[...], y2:null|[...], ...}.
-    // Plans saved before this change may have holidayDowSplit as a flat 7-element array
-    // (old single-slot shape) or as null. Migrate both legacy shapes to the per-slot map.
+    // Current format: per-slot map {y1: {voice:[7]|null, chat:[7]|null, email:[7]|null} | null, ...}
+    // Legacy formats: per-slot map with flat [7] values (pre-per-channel fix), flat [7] at top level,
+    // or null. All legacy shapes are migrated gracefully.
     if(!h.holidayDowSplit||typeof h.holidayDowSplit!=='object'||Array.isArray(h.holidayDowSplit)){
       // Legacy: null, or old flat array — reset to per-slot map with all nulls
       const _newSplit={};YEAR_SLOTS.forEach(y=>{_newSplit[y.toLowerCase()]=null;});
@@ -824,7 +836,19 @@ async function restoreQueuePlan(planKey){
       YEAR_SLOTS.forEach(y=>{
         const sk=y.toLowerCase();
         const entry=h.holidayDowSplit[sk];
-        if(Array.isArray(entry)&&entry.length===7){
+        if(entry&&!Array.isArray(entry)&&typeof entry==='object'){
+          // New per-channel structure — validate each channel array
+          const validated={};
+          ['voice','chat','email'].forEach(ch=>{
+            const arr=entry[ch];
+            if(Array.isArray(arr)&&arr.length===7){
+              const ss=arr.reduce((a,b)=>a+(+b||0),0);
+              validated[ch]=(ss>0.1)?arr:null;
+            } else {validated[ch]=null;}
+          });
+          h.holidayDowSplit[sk]=validated;
+        } else if(Array.isArray(entry)&&entry.length===7){
+          // Legacy flat array — keep as-is for backward compat (buildDailyData handles it)
           const ss=entry.reduce((a,b)=>a+(+b||0),0);
           if(ss<=0.1)h.holidayDowSplit[sk]=null;
         } else {h.holidayDowSplit[sk]=null;}
@@ -987,9 +1011,13 @@ function restoreFormFromConfig(){
   document.getElementById('emailOccupancy').value=cfg.emailOccupancy??75;
   document.getElementById('blendedVoicePct').value=cfg.blendedVoicePct??50;
   document.getElementById('blendedChatPct').value=cfg.blendedChatPct??30;
-  // blendedEmailPct is read-only (auto-remainder) — call validateBlendedSplit() immediately
-  // after all three split inputs are populated so that APP.config.blendedEmailPct is synced
-  // and the sum guard in computeNetHC() sees a consistent state before any HC computation.
+  // Explicitly write blendedEmailPct from restored config before calling validateBlendedSplit().
+  // This ensures the field shows the saved value immediately on plan restore rather than briefly
+  // displaying the default 0 before validateBlendedSplit() recalculates the remainder.
+  const _beRestored=cfg.blendedEmailPct??20;
+  const _emailRestoreEl=document.getElementById('blendedEmailPct');
+  if(_emailRestoreEl)_emailRestoreEl.value=_beRestored;
+  // validateBlendedSplit() re-derives email from voice+chat and syncs APP.config.
   validateBlendedSplit();
   document.getElementById('slVoicePct').value=cfg.sl?.voicePct??80;
   document.getElementById('slVoiceSec').value=cfg.sl?.voiceSec??20;
@@ -1347,17 +1375,36 @@ function validateOpHours(){
 /* ================================================================
    FIX 2 & 3: Blended split & AHT validation
 ================================================================ */
+/* validateBlendedSplit: enforces a 3-way sum-to-100 constraint across Voice, Chat, Email.
+   Default mode (triggered by Voice or Chat edits): Email = 100 - Voice - Chat (remainder).
+   Email-direct-edit mode (triggered by the Email input's oninput): Voice is adjusted as the
+   remainder — Voice = 100 - Chat - Email — keeping Chat fixed. This allows the Email %
+   to be typed directly while the sum-to-100 constraint is still enforced.
+   In all cases APP.config.blended{Voice,Chat,Email}Pct are kept in sync with the DOM. */
 function validateBlendedSplit(){
-  const v=Math.max(0,Math.min(100,+document.getElementById('blendedVoicePct').value||0));
-  const c=Math.max(0,Math.min(100,+document.getElementById('blendedChatPct').value||0));
+  const voiceInput=document.getElementById('blendedVoicePct');
+  const chatInput=document.getElementById('blendedChatPct');
+  const emailInput=document.getElementById('blendedEmailPct');
   const errEl=document.getElementById('blendedSplitError');
   const okEl=document.getElementById('blendedSplitOk');
-  // Email% is auto-adjusted as remainder: Email = 100 - Voice - Chat
-  // Clamp to [0,100] to handle edge cases where Voice+Chat > 100
-  const e=Math.max(0,Math.round((100-v-c)*100)/100);
-  const emailInput=document.getElementById('blendedEmailPct');
-  if(emailInput)emailInput.value=e;
-  if(v+c>100){
+  const activeEl=document.activeElement;
+  let v,c,e;
+  if(activeEl&&activeEl===emailInput){
+    // Email-direct-edit mode: Email is the driver; Voice absorbs the remainder.
+    // Chat is kept fixed. Voice = 100 - Chat - Email, clamped to [0,100].
+    c=Math.max(0,Math.min(100,+chatInput.value||0));
+    e=Math.max(0,Math.min(100,+emailInput.value||0));
+    v=Math.max(0,Math.round((100-c-e)*100)/100);
+    if(voiceInput)voiceInput.value=v;
+  } else {
+    // Default mode: Voice and Chat are the drivers; Email is the auto-remainder.
+    v=Math.max(0,Math.min(100,+voiceInput.value||0));
+    c=Math.max(0,Math.min(100,+chatInput.value||0));
+    e=Math.max(0,Math.round((100-v-c)*100)/100);
+    if(emailInput)emailInput.value=e;
+  }
+  if(v+c+e>100.01){
+    // Floating-point residual guard: treat >100.01 as a genuine constraint violation
     errEl.classList.remove('hidden');
     okEl.classList.add('hidden');
   } else {
@@ -1655,11 +1702,12 @@ function invalidateAllCaches(){
   cfg.aht.email=Math.max(1,_ahtSeconds.email||600);
   cfg.concurrency=+document.getElementById('chatConcurrency').value||2.5;
   cfg.emailOccupancy=+document.getElementById('emailOccupancy').value||75;
-  const _bv=+document.getElementById('blendedVoicePct').value||0;
-  const _bc=+document.getElementById('blendedChatPct').value||0;
-  // Math.round to 2dp then Math.max(0,...) prevents floating-point remainder like -0.00
-  // or -0.001 from reaching computeEmailDailyNetHC() as a negative daily volume.
-  const _be=Math.max(0,Math.round((100-_bv-_bc)*100)/100);
+  const _bv=Math.max(0,Math.min(100,+document.getElementById('blendedVoicePct').value||0));
+  const _bc=Math.max(0,Math.min(100,+document.getElementById('blendedChatPct').value||0));
+  // Read email pct directly from DOM (field is now editable; validateBlendedSplit keeps it
+  // in sync). Fall back to computing the remainder if the field is empty or stale.
+  const _beRaw=+document.getElementById('blendedEmailPct').value;
+  const _be=(!isNaN(_beRaw)&&_beRaw>=0)?Math.max(0,Math.round(_beRaw*100)/100):Math.max(0,Math.round((100-_bv-_bc)*100)/100);
   cfg.blendedVoicePct=_bv;
   cfg.blendedChatPct=_bc;
   cfg.blendedEmailPct=_be;
@@ -1734,16 +1782,38 @@ function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
    HOLIDAY MODEL
 ================================================================ */
 function _emptyYear(){return{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}};}
+function _emptyDVSlot(){return{voice:[null,null,null,null,null,null,null],chat:[null,null,null,null,null,null,null],email:[null,null,null,null,null,null,null]};}
+/* migrateDailyVolumes: converts any legacy flat-array dailyVolumes slot into the new
+   per-channel object schema. Legacy format: slot = [n0..n6] (single blended total per day).
+   New format: slot = {voice:[n0..n6], chat:[n0..n6], email:[n0..n6]}.
+   Migration strategy: zero-fill all three channel arrays (no proportional distribution —
+   flat values cannot be reliably split without knowing the channel mix at time of entry).
+   The user's total volume intent is preserved in the year-slot actual fields (h.years[y].actual)
+   which are NOT altered. Only the daily grid data is migrated. */
+function migrateDailyVolumes(raw){
+  if(!raw||typeof raw!=='object')return _emptyDVSlot();
+  // Already new schema: has 'voice', 'chat', or 'email' keys that are arrays
+  if(Array.isArray(raw.voice)||Array.isArray(raw.chat)||Array.isArray(raw.email)){
+    const out={voice:[null,null,null,null,null,null,null],chat:[null,null,null,null,null,null,null],email:[null,null,null,null,null,null,null]};
+    ['voice','chat','email'].forEach(ch=>{
+      if(Array.isArray(raw[ch])){const p=raw[ch].slice(0,7);while(p.length<7)p.push(null);out[ch]=p;}
+    });
+    return out;
+  }
+  // Legacy flat array: zero-fill all channels
+  return _emptyDVSlot();
+}
 function newHoliday(id){
   const years={};YEAR_SLOTS.forEach(y=>{years[y]=_emptyYear();});
-  // dailyVolumes: keyed by year slot (y1..y5), each a 7-element array [Sat,Sun,Mon,Tue,Wed,Thu,Fri].
-  // null entries mean "not entered" — treated as 0 in sums but distinguished from an explicit 0.
-  // holidayDowSplit: per-slot map keyed by lowercase year slot (y1..y5).
-  // Each value is either a 7-element array of percentages (summing to 100) or null.
-  // null means "not yet derived" — buildDailyData falls back to h.dowSplit[ch] for that slot.
-  // Storing per-slot avoids last-write-wins corruption when the user enters daily volumes
-  // for multiple year slots with genuinely different day-of-week patterns.
-  const dailyVolumes={};YEAR_SLOTS.forEach(y=>{dailyVolumes[y.toLowerCase()]=[null,null,null,null,null,null,null];});
+  // dailyVolumes: keyed by year slot (y1..y5).
+  // Each slot is {voice:[7 nulls], chat:[7 nulls], email:[7 nulls]}.
+  // null entries mean "not entered" — distinguished from explicit 0.
+  // holidayDowSplit: per-slot, per-channel map.
+  // Structure: {[slotKey]: {voice:[7 fracs]|null, chat:[7 fracs]|null, email:[7 fracs]|null} | null}
+  // Each channel's 7-element array contains fractional percentages (summing to 100) derived
+  // from that channel's own daily volume entries. null at channel level means fall back to
+  // h.dowSplit[ch] (global per-channel DOW split). null at slot level means no split for that slot.
+  const dailyVolumes={};YEAR_SLOTS.forEach(y=>{dailyVolumes[y.toLowerCase()]=_emptyDVSlot();});
   const holidayDowSplit={};YEAR_SLOTS.forEach(y=>{holidayDowSplit[y.toLowerCase()]=null;});
   return{id,name:'',date:'',channels:['voice'],planSource:'WFM Forecast',
     planVolume:{voice:0,chat:0,email:0,blended:0},
@@ -1844,23 +1914,52 @@ function renderHolidayList(resetPage){
           isOvernight?`<div class="overnight-warn mt-2">⚠️ Overnight window (${effectiveStart}–${effectiveEnd}) — intervals will wrap past midnight correctly.</div>`:''}
       </div>
       <label class="form-label mb-3">Historical data (weekly volume) — <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Y1 = most recent year</span></label>
-      <div class="holiday-year-grid">
+      <div class="hist-data-grid">
         ${YEAR_SLOTS.map(y=>{
           const slotKey=y.toLowerCase();
-          const dvArr=(h.dailyVolumes&&h.dailyVolumes[slotKey])||[null,null,null,null,null,null,null];
-          // Compute week total from dvArr for display in the grid
-          const dvWeekTotal=dvArr.reduce((s,v)=>s+(v!=null?+v:0),0);
-          const anyEntered=dvArr.some(v=>v!=null&&v!=='');
-          return`<div class="year-block">
+          // New per-channel schema: {voice:[7], chat:[7], email:[7]}
+          // migrateDailyVolumes handles legacy flat arrays gracefully
+          const rawDV=(h.dailyVolumes&&h.dailyVolumes[slotKey]);
+          const dvSlot=migrateDailyVolumes(rawDV);
+          // Ensure model is updated to new schema in case this is a legacy plan
+          if(h.dailyVolumes)h.dailyVolumes[slotKey]=dvSlot;
+          const vArr=dvSlot.voice,cArr=dvSlot.chat,eArr=dvSlot.email;
+          // Per-channel 7-day sums
+          const vTotal=vArr.reduce((s,v)=>s+(v!=null?+v:0),0);
+          const cTotal=cArr.reduce((s,v)=>s+(v!=null?+v:0),0);
+          const eTotal=eArr.reduce((s,v)=>s+(v!=null?+v:0),0);
+          const grandTotal=vTotal+cTotal+eTotal;
+          const anyEntered=[...vArr,...cArr,...eArr].some(v=>v!=null&&v!=='');
+          // Mismatch check: compare grand daily total (voice+chat+email daily grid sums) against
+          // the sum of per-channel historical actuals (voice+chat+email only — blended excluded).
+          // Rationale: the daily volume grid collects per-channel data (voice, chat, email) and
+          // cannot represent blended volumes. Comparing against a blended actual would always
+          // produce an unresolvable mismatch on blended-only holidays.
+          // Suppression rule: when the holiday uses blended channel AND per-channel actuals
+          // (voice+chat+email) are all zero or absent for this slot, the holiday has
+          // blended-only actuals. The daily grid cannot validate against blended actuals, so the
+          // mismatch flag is suppressed entirely to avoid an unresolvable warning.
+          const slotActualTotal=CHANNELS.reduce((s,ch)=>s+(h.years[y]&&h.years[y].actual[ch]>0?h.years[y].actual[ch]:0),0);
+          const _isBlendedOnly=(h.channels&&h.channels.includes('blended'))&&slotActualTotal===0&&(h.years[y]&&(h.years[y].actual.blended||0)>0);
+          const showMismatch=!_isBlendedOnly&&grandTotal>0&&slotActualTotal>0&&Math.abs(grandTotal-slotActualTotal)/slotActualTotal>0.01;
+          // Y5 spans full width in the 2-column hist-data-grid to avoid an orphaned blank right cell
+          const _y5Span=y==='Y5'?'grid-column:1/-1;':'';
+          return`<div class="year-block" style="${_y5Span}">
           <div class="year-block__label">${getYearLabel(y)}</div>
           <input type="number" placeholder="Calendar year" value="${(h.years[y]||{}).year||''}"
             oninput="setHVal('${h.id}','years.${y}.year',this.value)">
           <label style="font-size:10px;color:var(--text-tertiary)">Actual volume</label>
-          ${CHANNELS.map(ch=>`<div style="margin-bottom:4px">
-            <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
-            <input type="number" value="${(h.years[y]&&h.years[y].actual[ch])||0}"
-              oninput="setHVal('${h.id}','years.${y}.actual.${ch}',+this.value)">
-          </div>`).join('')}
+          ${(()=>{
+            // Show voice/chat/email inputs always; add blended input when holiday uses blended.
+            // Blended actuals are stored in h.years[y].actual.blended and remain visible and
+            // editable here for data completeness (mismatch guard uses only voice/chat/email).
+            const _actChs=h.channels&&h.channels.includes('blended')?[...CHANNELS,'blended']:CHANNELS;
+            return _actChs.map(ch=>`<div style="margin-bottom:4px">
+              <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
+              <input type="number" value="${(h.years[y]&&h.years[y].actual[ch])||0}"
+                oninput="setHVal('${h.id}','years.${y}.actual.${ch}',+this.value)">
+            </div>`).join('');
+          })()}
           <!-- Baseline volume inputs removed from Tab 1 UI. Baseline data persists in
                h.years[y].baseline[ch] for anomaly detection and impact % on Tab 2.
                Baseline can be imported via CSV/XLS upload (importHolidayFile). -->
@@ -1869,24 +1968,58 @@ function renderHolidayList(resetPage){
             <i class="dvg-toggle__arrow">&#9654;</i>
             <span>${(()=>{
               const _hds=h.holidayDowSplit;
-              const _hasSplit=_hds&&typeof _hds==='object'&&!Array.isArray(_hds)&&Array.isArray(_hds[slotKey]);
+              // Per-channel structure: slot entry is {voice:[7]|null, chat:[7]|null, email:[7]|null}
+              // Has an active split when at least one channel has a non-null 7-element array.
+              // Also accepts legacy flat array (backward compat) as an active split.
+              const _slotEntry=_hds&&typeof _hds==='object'&&!Array.isArray(_hds)?_hds[slotKey]:null;
+              const _hasSplit=Array.isArray(_slotEntry)||(
+                _slotEntry&&typeof _slotEntry==='object'&&
+                ['voice','chat','email'].some(ch=>Array.isArray(_slotEntry[ch])&&_slotEntry[ch].length===7)
+              );
               if(anyEntered&&_hasSplit)return'Daily volumes + DOW split active';
               if(anyEntered)return'Daily volumes entered';
               return'Enter daily volumes';
             })()}</span>
           </button>
           <div class="dvg-grid${anyEntered?' open':''}" id="dvg_grid_${h.id}_${slotKey}">
-            <div class="dvg-row__head">
-              ${DAYS.map(d=>`<span class="dvg-col-label">${d}</span>`).join('')}
-              <span class="dvg-col-label dvg-col-label--total">Total</span>
+            <!-- Column headers: Day | Voice | Chat | Email -->
+            <div class="dvg-ch-head">
+              <span></span>
+              <span class="dvg-col-label dvg-col-label--voice">Voice</span>
+              <span class="dvg-col-label dvg-col-label--chat">Chat</span>
+              <span class="dvg-col-label dvg-col-label--email">Email</span>
             </div>
-            <div class="dvg-row">
-              ${DAYS.map((d,di)=>`<input type="number" class="dvg-input" min="0" step="1"
-                id="dvg_inp_${h.id}_${slotKey}_${di}"
-                value="${dvArr[di]!=null?dvArr[di]:''}" placeholder="0"
-                oninput="onDVGInput('${h.id}','${slotKey}',${di},this.value)">`).join('')}
-              <div class="dvg-total" id="dvg_total_${h.id}_${slotKey}">${anyEntered?dvWeekTotal.toLocaleString():'—'}</div>
+            <!-- One row per day with 3 channel inputs -->
+            ${DAYS.map((d,di)=>`<div class="dvg-ch-row">
+              <span class="dvg-day-label">${d}</span>
+              <input type="number" class="dvg-input" min="0" step="1"
+                id="dvg_inp_${h.id}_${slotKey}_voice_${di}"
+                value="${vArr[di]!=null?vArr[di]:''}" placeholder="0"
+                oninput="onDVGInput('${h.id}','${slotKey}','voice',${di},this.value)">
+              <input type="number" class="dvg-input" min="0" step="1"
+                id="dvg_inp_${h.id}_${slotKey}_chat_${di}"
+                value="${cArr[di]!=null?cArr[di]:''}" placeholder="0"
+                oninput="onDVGInput('${h.id}','${slotKey}','chat',${di},this.value)">
+              <input type="number" class="dvg-input" min="0" step="1"
+                id="dvg_inp_${h.id}_${slotKey}_email_${di}"
+                value="${eArr[di]!=null?eArr[di]:''}" placeholder="0"
+                oninput="onDVGInput('${h.id}','${slotKey}','email',${di},this.value)">
+            </div>`).join('')}
+            <!-- Per-channel week totals (read-only, reactive) -->
+            <div class="dvg-ch-totals">
+              <span class="dvg-col-label" style="display:flex;align-items:center">Total</span>
+              <div class="dvg-total" id="dvg_total_${h.id}_${slotKey}_voice" style="color:var(--ch-voice)">${anyEntered&&vTotal>0?vTotal.toLocaleString():'—'}</div>
+              <div class="dvg-total" id="dvg_total_${h.id}_${slotKey}_chat" style="color:var(--ch-chat)">${anyEntered&&cTotal>0?cTotal.toLocaleString():'—'}</div>
+              <div class="dvg-total" id="dvg_total_${h.id}_${slotKey}_email" style="color:var(--ch-email)">${anyEntered&&eTotal>0?eTotal.toLocaleString():'—'}</div>
             </div>
+          </div>
+          <!-- Volume mismatch flag: fires when |daily_grand_total - historical_actual_total| / historical_actual_total > 1%.
+               "Historical actual total" = sum of h.years[y].actual for voice+chat+email only (blended excluded —
+               the daily volume grid captures per-channel data and cannot validate against blended actuals).
+               Suppressed when the holiday has blended-only actuals (voice+chat+email all zero for that slot).
+               The flag does not appear when either side is zero. -->
+          <div class="dvg-mismatch-warn${showMismatch?' visible':''}" id="dvg_mismatch_${h.id}_${slotKey}">
+            Daily totals (${grandTotal.toLocaleString()}) do not match historical actual total (${slotActualTotal.toLocaleString()}) — please reconcile.
           </div>
         </div>`;
         }).join('')}
@@ -2339,11 +2472,20 @@ function renderDailyBreakdown(){
           const _sorted=[...sel.years].sort((a,b)=>YEAR_SLOTS.indexOf(a)-YEAR_SLOTS.indexOf(b));
           _tab5SlotKey=_sorted[0].toLowerCase();
         }
-        const _perSlotSplit=_tab5SlotKey&&h.holidayDowSplit&&
-          typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?
-          h.holidayDowSplit[_tab5SlotKey]:null;
-        const _useHolidaySplit=Array.isArray(_perSlotSplit)&&_perSlotSplit.length===7;
-        const splits=_useHolidaySplit?_perSlotSplit:h.dowSplit[ch];
+        const _hds5=h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?h.holidayDowSplit:null;
+        const _perSlotEntry=_tab5SlotKey&&_hds5?_hds5[_tab5SlotKey]:null;
+        // Resolve channel-specific split (mirrors buildDailyData fallback chain)
+        let splits,_useHolidaySplit;
+        if(_perSlotEntry&&!Array.isArray(_perSlotEntry)&&typeof _perSlotEntry==='object'){
+          const _chFracs=_perSlotEntry[ch];
+          _useHolidaySplit=Array.isArray(_chFracs)&&_chFracs.length===7;
+          splits=_useHolidaySplit?_chFracs:h.dowSplit[ch];
+        } else if(Array.isArray(_perSlotEntry)&&_perSlotEntry.length===7){
+          // Legacy flat array — backward compat
+          splits=_perSlotEntry;_useHolidaySplit=true;
+        } else {
+          splits=h.dowSplit[ch];_useHolidaySplit=false;
+        }
         const splitSum=splits.reduce((a,b)=>a+b,0);
         const eff=splitSum>0?splits.map(s=>s/splitSum*100):splits.map(()=>100/7);
         return`<div class="mb-4">
@@ -2378,31 +2520,20 @@ function resetDowSplit(hid){const h=APP.holidays.find(x=>x.id===hid);if(!h)retur
 
 /* ================================================================
    DAILY VOLUME GRID — 7-day expandable inputs per year slot
+   Per-channel sub-grid: each day row has Voice / Chat / Email inputs.
+   Schema: h.dailyVolumes[slotKey] = {voice:[7], chat:[7], email:[7]}
    toggleDVG: expand/collapse without re-rendering the full list.
-   onDVGInput: handles input on a single day cell —
-     (a) updates h.dailyVolumes[slotKey][di]
-     (b) recomputes weekTotal and updates the read-only total cell
-     (c) derives h.holidayDowSplit[slotKey] as a 7-element % array
-         (summing to exactly 100, floating-point corrected across all
-         positions, not just the last) or sets it to null when all
-         inputs are blank or weekTotal is 0.
-   Write-back design:
-     - The daily volume grid captures cross-channel totals for a year
-       slot. There is no reliable per-channel mapping from a single
-       aggregate total, so NO write-back to h.years[y].actual[ch] is
-       performed. Per-channel actual volumes must be entered directly
-       in the year-slot actual fields on the holiday card.
-     - holidayDowSplit is stored per slot (y1..y5) — last-slot-wins
-       corruption between Y1 and Y2 daily volumes is eliminated.
-     - allBlank treats null, empty string, AND the number 0 the same
-       for display purposes: a slot where every cell is 0 shows '0'
-       in the total cell (not '—') because weekTotal=0, which triggers
-       the weekTotal===0 branch that sets the split to null and shows
-       the formatted '0' string.
-     - If all 7 cells are blank (null or ''), the total cell shows '—'
-       and holidayDowSplit[slotKey] is set to null.
-     - If all 7 cells are numeric 0, weekTotal=0 and holidayDowSplit
-       [slotKey] is set to null (null DOW split triggers global fallback).
+   onDVGInput: handles input on a per-channel per-day cell —
+     (a) updates h.dailyVolumes[slotKey][channel][di]
+     (b) recomputes per-channel sums and updates three read-only total cells
+     (c) derives h.holidayDowSplit[slotKey] as a per-channel object
+         {voice:[7 fracs]|null, chat:[7 fracs]|null, email:[7 fracs]|null}
+         Each channel's fractions derive from that channel's own daily volumes.
+         null at channel level means fall back to h.dowSplit[ch].
+     (d) updates the volume mismatch warning when |daily_grand - slot_actual|/slot_actual > 1%
+   Write-back: no write-back to h.years[y].actual[ch] from daily grid.
+   Per-channel actual volumes must be entered in the year-slot actual fields.
+   holidayDowSplit per-slot eliminates last-slot-wins corruption across Y1..Y5.
 ================================================================ */
 function toggleDVG(hid,slotKey){
   const toggleEl=document.getElementById('dvg_toggle_'+hid+'_'+slotKey);
@@ -2413,65 +2544,122 @@ function toggleDVG(hid,slotKey){
   else{toggleEl.classList.add('open');gridEl.classList.add('open');}
 }
 
-function onDVGInput(hid,slotKey,di,rawVal){
+/* _deriveDowFracs: derives a 7-element normalised percentage array from a 7-day volume array.
+   Each element = arr[i] / total * 100. Floating-point correction via running-remainder
+   method across first 6 positions with Math.round(*1e10)/1e10 to avoid IEEE 754 drift.
+   Returns null when the array is all-zero or all-null (divide-by-zero guard). */
+function _deriveDowFracs(arr){
+  const total=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+  if(total<=0)return null;
+  const rawPcts=arr.map(v=>(v!=null?+v:0)/total*100);
+  let remaining=100;
+  for(let i=0;i<6;i++){const r=Math.round(rawPcts[i]*1e10)/1e10;rawPcts[i]=r;remaining-=r;}
+  rawPcts[6]=Math.max(0,Math.round(remaining*1e10)/1e10);
+  return rawPcts;
+}
+
+/* onDVGInput: handles input on a per-channel per-day cell.
+   Schema: h.dailyVolumes[slotKey] = {voice:[7], chat:[7], email:[7]}
+   (a) Updates h.dailyVolumes[slotKey][channel][di]
+   (b) Recomputes per-channel week totals and updates the three read-only total cells
+   (c) Derives h.holidayDowSplit[slotKey] as a per-channel object:
+       {voice:[7 fracs]|null, chat:[7 fracs]|null, email:[7 fracs]|null}
+       Each channel's 7-element array is normalised from that channel's own daily volumes.
+       A channel with all-zero or all-null daily volumes gets null (falls back to h.dowSplit[ch]).
+       The slot-level entry is set to null only when ALL three channels are null (allBlank).
+   (d) Updates the mismatch warning element (per-channel actuals only, blended excluded).
+   WFM domain: Voice uses Erlang C, Chat uses concurrency, Email uses daily throughput.
+   Each channel's DOW fractions must derive from that channel's own volumes — not a
+   blended cross-channel total — to preserve channel-model fidelity. */
+function onDVGInput(hid,slotKey,channel,di,rawVal){
   const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
-  // Ensure dailyVolumes structure exists (graceful for restored holidays)
+  // Ensure dailyVolumes structure exists and has the new per-channel shape
   if(!h.dailyVolumes)h.dailyVolumes={};
-  if(!Array.isArray(h.dailyVolumes[slotKey]))h.dailyVolumes[slotKey]=[null,null,null,null,null,null,null];
+  if(!h.dailyVolumes[slotKey]||Array.isArray(h.dailyVolumes[slotKey])){
+    h.dailyVolumes[slotKey]=_emptyDVSlot();
+  } else {
+    // Ensure each channel sub-array exists
+    ['voice','chat','email'].forEach(ch=>{
+      if(!Array.isArray(h.dailyVolumes[slotKey][ch]))h.dailyVolumes[slotKey][ch]=[null,null,null,null,null,null,null];
+    });
+  }
   // Ensure holidayDowSplit is a per-slot map (migration safety)
   if(!h.holidayDowSplit||typeof h.holidayDowSplit!=='object'||Array.isArray(h.holidayDowSplit)){
     const _hds={};YEAR_SLOTS.forEach(y=>{_hds[y.toLowerCase()]=null;});h.holidayDowSplit=_hds;
   }
   // Store raw value: null if blank, else non-negative numeric
   const trimmed=String(rawVal).trim();
-  h.dailyVolumes[slotKey][di]=(trimmed===''||trimmed===null)?null:Math.max(0,+trimmed||0);
+  h.dailyVolumes[slotKey][channel][di]=(trimmed===''||trimmed===null)?null:Math.max(0,+trimmed||0);
 
-  const arr=h.dailyVolumes[slotKey];
-  // allBlank: true only when every cell is null or empty string.
-  // A cell containing the number 0 is NOT blank — it is explicit zero data.
-  const allBlank=arr.every(v=>v===null||v==='');
+  const vArr=h.dailyVolumes[slotKey].voice;
+  const cArr=h.dailyVolumes[slotKey].chat;
+  const eArr=h.dailyVolumes[slotKey].email;
 
-  // Update the read-only total cell
-  const totalEl=document.getElementById('dvg_total_'+hid+'_'+slotKey);
+  // allBlank: true only when every cell across all three channels is null or empty string.
+  const allBlank=[...vArr,...cArr,...eArr].every(v=>v===null||v==='');
+
+  // Per-channel sums (for total cells and mismatch guard)
+  const vTotal=vArr.reduce((s,v)=>s+(v!=null?+v:0),0);
+  const cTotal=cArr.reduce((s,v)=>s+(v!=null?+v:0),0);
+  const eTotal=eArr.reduce((s,v)=>s+(v!=null?+v:0),0);
+  const grandTotal=vTotal+cTotal+eTotal;
+
+  // Update per-channel read-only total cells
+  const vtEl=document.getElementById('dvg_total_'+hid+'_'+slotKey+'_voice');
+  const ctEl=document.getElementById('dvg_total_'+hid+'_'+slotKey+'_chat');
+  const etEl=document.getElementById('dvg_total_'+hid+'_'+slotKey+'_email');
   if(allBlank){
-    if(totalEl)totalEl.textContent='—';
-    // All inputs cleared: set this slot's holidayDowSplit to null (restore global fallback)
+    if(vtEl)vtEl.textContent='—';if(ctEl)ctEl.textContent='—';if(etEl)etEl.textContent='—';
     h.holidayDowSplit[slotKey]=null;
+    _updateDVGMismatch(hid,slotKey,h,0);
     invalidateAllCaches();return;
   }
+  if(vtEl)vtEl.textContent=vTotal>0?vTotal.toLocaleString():'—';
+  if(ctEl)ctEl.textContent=cTotal>0?cTotal.toLocaleString():'—';
+  if(etEl)etEl.textContent=eTotal>0?eTotal.toLocaleString():'—';
 
-  // Compute week total (null treated as 0, explicit 0 is 0)
-  const weekTotal=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
-  // Display: weekTotal=0 when all cells are 0 — show '0', not '—', so the user can
-  // see they entered 0s and can correct them. '—' is reserved for the truly blank case.
-  if(totalEl)totalEl.textContent=weekTotal===0?'0':weekTotal.toLocaleString();
+  // --- Derive per-channel holidayDowSplit for this slot ---
+  // Each channel's fractions are derived independently from that channel's own daily volumes.
+  // Voice: Erlang C — its DOW pattern drives interval-level arrival rate distribution.
+  // Chat: concurrency model — its DOW pattern drives sessions-per-agent distribution.
+  // Email: daily throughput model — its DOW pattern drives daily contact volume distribution.
+  // A channel with all-zero or all-null inputs gets null — buildDailyData falls back to
+  // h.dowSplit[ch] (the global per-channel DOW split from Tab 5 Daily Breakdown).
+  const vFracs=_deriveDowFracs(vArr);
+  const cFracs=_deriveDowFracs(cArr);
+  const eFracs=_deriveDowFracs(eArr);
+  // Store as per-channel object; null slot-level only when all channels are null (allBlank guard above
+  // already returned, so at least one channel has data here — store the object always).
+  h.holidayDowSplit[slotKey]={voice:vFracs,chat:cFracs,email:eFracs};
 
-  // --- Derive holidayDowSplit for this slot ---
-  // Stored as h.holidayDowSplit[slotKey] — per-slot, independent of other slots.
-  // Only derive when weekTotal > 0; zero total (all-zero entries) sets to null so the
-  // HC calculation falls back to global dowSplit rather than dividing by zero.
-  if(weekTotal>0){
-    // Compute raw percentages for all 7 days
-    const rawPcts=arr.map(v=>(v!=null?+v:0)/weekTotal*100);
-    // Floating-point correction: recompute each element from the running remainder
-    // so accumulated drift is absorbed across all positions, not just the last.
-    // Method: iterate i=0..5, subtract each rounded value from the remaining 100;
-    // the last position receives whatever remains, guaranteeing sum=exactly 100
-    // for any integer or fractional input without relying on index-6-only adjustment.
-    let remaining=100;
-    for(let i=0;i<6;i++){
-      const rounded=parseFloat(rawPcts[i].toFixed(10));
-      rawPcts[i]=rounded;
-      remaining-=rounded;
-    }
-    rawPcts[6]=Math.max(0,parseFloat(remaining.toFixed(10)));
-    h.holidayDowSplit[slotKey]=rawPcts;
-  } else {
-    // weekTotal=0: all entries are 0 — no valid DOW split can be derived, fall back to global
-    h.holidayDowSplit[slotKey]=null;
-  }
-
+  _updateDVGMismatch(hid,slotKey,h,grandTotal);
   invalidateAllCaches();
+}
+
+/* _updateDVGMismatch: updates the mismatch warning element for a given year slot.
+   Compares grandTotal (sum of all daily voice+chat+email inputs) against the
+   historical actual total (sum of h.years[y].actual[ch] for voice+chat+email ONLY —
+   blended is excluded). Shows warning when both are nonzero and the relative difference
+   exceeds 1%. Clears warning otherwise.
+   Suppression: when the holiday has blended-only actuals for this slot (voice+chat+email
+   actuals all zero but blended actual is present), the mismatch flag is suppressed entirely
+   because the daily grid cannot produce a per-channel breakdown to compare against blended. */
+function _updateDVGMismatch(hid,slotKey,h,grandTotal){
+  const warnEl=document.getElementById('dvg_mismatch_'+hid+'_'+slotKey);if(!warnEl)return;
+  const y=slotKey.toUpperCase(); // e.g. 'y1' → 'Y1'
+  // Reference total: per-channel actuals (voice+chat+email) only — blended excluded.
+  // The daily volume grid collects per-channel data; comparing against blended actuals
+  // would produce an unresolvable mismatch on blended-only holidays.
+  const slotActualTotal=CHANNELS.reduce((s,ch)=>s+(h.years[y]&&h.years[y].actual[ch]>0?h.years[y].actual[ch]:0),0);
+  // Suppression: blended-only slot — per-channel actuals are all zero but blended is present.
+  const _isBlendedOnly=(h.channels&&h.channels.includes('blended'))&&slotActualTotal===0&&(h.years[y]&&(h.years[y].actual.blended||0)>0);
+  const show=!_isBlendedOnly&&grandTotal>0&&slotActualTotal>0&&Math.abs(grandTotal-slotActualTotal)/slotActualTotal>0.01;
+  if(show){
+    warnEl.textContent=`Daily totals (${grandTotal.toLocaleString()}) do not match historical actual total (${slotActualTotal.toLocaleString()}) — please reconcile.`;
+    warnEl.classList.add('visible');
+  } else {
+    warnEl.classList.remove('visible');
+  }
 }
 
 /* ================================================================
@@ -2483,34 +2671,47 @@ function buildDailyData(h,ch){
   const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
   if(!sel)return{days:[],hitCap:false};
   const wkVol=sel.forecasted||0;
-  // holidayDowSplit fallback logic (per-slot):
+  // holidayDowSplit fallback logic (per-slot, per-channel):
   // The selected combination determines which year slot's forecast is used.
   // When a single year slot was selected (e.g. "Last Year 2025"), that slot's
-  // dailyVolumes-derived split is used. For multi-year average combinations,
-  // no single slot's split is unambiguously authoritative, so we derive the
-  // effective slot key from the first year in the combination.
-  // Fallback chain:
-  //   1. h.holidayDowSplit[effectiveSlotKey] — per-slot split from daily volume grid
-  //   2. h.dowSplit[ch] — per-channel global DOW split from Tab 5
-  // This applies identically across all four channel models: Erlang C (Voice),
-  // concurrency (Chat), throughput (Email), weighted blend (Blended).
-  // The underlying staffing formulas are NOT altered — only the input per-day
-  // volume percentages change.
+  // channel-specific dailyVolumes-derived split is used. For multi-year combinations,
+  // the most-recent slot's split is used (first in YEAR_SLOTS order).
+  // Fallback chain (per channel):
+  //   1. h.holidayDowSplit[effectiveSlotKey][ch] — channel-specific split from daily volume grid
+  //      (new per-channel structure: {voice:[7]|null, chat:[7]|null, email:[7]|null})
+  //   2. h.holidayDowSplit[effectiveSlotKey] as flat [7] — legacy blended structure (backward compat)
+  //   3. h.dowSplit[ch] — per-channel global DOW split from Tab 5 Daily Breakdown
+  // WFM domain: each channel uses its own DOW pattern so that channel-model fidelity is preserved:
+  //   Voice → Erlang C applied with voice-specific daily volumes
+  //   Chat  → concurrency model applied with chat-specific daily volumes
+  //   Email → daily throughput model applied with email-specific daily volumes
   let effectiveSlotKey=null;
   if(sel.years&&sel.years.length===1){
     effectiveSlotKey=sel.years[0].toLowerCase(); // e.g. 'Y1' → 'y1'
   } else if(sel.years&&sel.years.length>1){
     // Multi-year average: use the most-recent (lowest index) year's slot split.
-    // Y-slots are ordered Y1 (most recent) → Y5 (oldest), so the first in the array
-    // after sorting by YEAR_SLOTS index is the most recent.
     const sorted=[...sel.years].sort((a,b)=>YEAR_SLOTS.indexOf(a)-YEAR_SLOTS.indexOf(b));
     effectiveSlotKey=sorted[0].toLowerCase();
   }
-  const perSlotSplit=effectiveSlotKey&&
-    h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?
-    h.holidayDowSplit[effectiveSlotKey]:null;
-  const useHolidaySplit=Array.isArray(perSlotSplit)&&perSlotSplit.length===7;
-  const splits=useHolidaySplit?perSlotSplit:h.dowSplit[ch];
+  // Resolve the per-slot entry from holidayDowSplit
+  const _hds=h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?h.holidayDowSplit:null;
+  const perSlotEntry=effectiveSlotKey&&_hds?_hds[effectiveSlotKey]:null;
+  // Channel-specific split resolution:
+  // Case A: new per-channel structure — perSlotEntry is {voice, chat, email}
+  // Case B: legacy flat array — treat as shared blended split (backward compatibility)
+  // Case C: null — fall back to h.dowSplit[ch]
+  let splits;
+  if(perSlotEntry&&!Array.isArray(perSlotEntry)&&typeof perSlotEntry==='object'){
+    // Case A: per-channel object — read channel-specific array; fall back to h.dowSplit[ch] if null
+    const chFracs=perSlotEntry[ch];
+    splits=(Array.isArray(chFracs)&&chFracs.length===7)?chFracs:h.dowSplit[ch];
+  } else if(Array.isArray(perSlotEntry)&&perSlotEntry.length===7){
+    // Case B: legacy flat array — use as shared split (old saved plans before this fix)
+    splits=perSlotEntry;
+  } else {
+    // Case C: no per-slot split — use global per-channel DOW split
+    splits=h.dowSplit[ch];
+  }
   const splitSum=splits.reduce((a,b)=>a+b,0);
   const opStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
   const opEnd=h.operatingHoursOverride?h.operatingHours.end:APP.config.defaultEnd;
@@ -3863,31 +4064,38 @@ function loadFromJSON(d){
         if(yd.anomalyFlag&&yd.anomalySource==='manual')nh.manualAnomalyOverrides[y]=true;
       }});}
       // Restore dailyVolumes — handle missing field (plans saved before this feature).
-      // Missing field → default null arrays (no entries). Partial arrays padded to 7 elements.
+      // migrateDailyVolumes converts legacy flat arrays to the new per-channel schema.
       if(h.dailyVolumes&&typeof h.dailyVolumes==='object'){
         YEAR_SLOTS.forEach(y=>{
           const slotKey=y.toLowerCase();
-          const stored=h.dailyVolumes[slotKey];
-          if(Array.isArray(stored)){
-            // Pad to 7 elements if shorter; slice to 7 if longer (defensive)
-            const padded=stored.slice(0,7);
-            while(padded.length<7)padded.push(null);
-            nh.dailyVolumes[slotKey]=padded;
-          }
-          // else: leave as default null array from newHoliday()
+          nh.dailyVolumes[slotKey]=migrateDailyVolumes(h.dailyVolumes[slotKey]);
         });
       }
-      // Restore holidayDowSplit — per-slot map {y1:null|[7-elem], y2:..., ...}.
-      // Handles three stored shapes:
-      //   (a) per-slot map (current v2.0 format) — validate each slot entry
-      //   (b) legacy flat array (old single-split shape) — discard (no slot mapping)
-      //   (c) null/missing — leave as default null-per-slot map from newHoliday()
+      // Restore holidayDowSplit — per-slot, per-channel map.
+      // Current format: {[slotKey]: {voice:[7]|null, chat:[7]|null, email:[7]|null} | null}
+      // Legacy formats handled:
+      //   (a) per-slot map with per-channel objects (current) — validate each channel array
+      //   (b) per-slot map with flat [7] values (pre-per-channel fix) — keep for compat
+      //   (c) flat [7] at top level (old single-split shape) — discard (no slot mapping)
+      //   (d) null/missing — leave as default null-per-slot map from newHoliday()
       if(h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)){
         // Per-slot map — validate each slot
         YEAR_SLOTS.forEach(y=>{
           const sk=y.toLowerCase();
           const entry=h.holidayDowSplit[sk];
-          if(Array.isArray(entry)&&entry.length===7){
+          if(entry&&!Array.isArray(entry)&&typeof entry==='object'){
+            // New per-channel structure
+            const validated={};
+            ['voice','chat','email'].forEach(ch=>{
+              const arr=entry[ch];
+              if(Array.isArray(arr)&&arr.length===7){
+                const ss=arr.reduce((a,b)=>a+(+b||0),0);
+                validated[ch]=(ss>0.1)?arr:null;
+              } else {validated[ch]=null;}
+            });
+            nh.holidayDowSplit[sk]=validated;
+          } else if(Array.isArray(entry)&&entry.length===7){
+            // Legacy flat array — keep as-is
             const ss=entry.reduce((a,b)=>a+(+b||0),0);
             if(ss>0.1)nh.holidayDowSplit[sk]=entry;
             // else sum ~0 — leave as null (already null from newHoliday)
@@ -4052,6 +4260,10 @@ window.addEventListener('DOMContentLoaded',()=>{
   // Sync _ahtSeconds from DOM defaults (DOM is pre-populated with Minutes values).
   // onAHTInput reads the displayed value and converts to seconds using the current unit divisor.
   onAHTInput('voice');onAHTInput('chat');onAHTInput('email');
+  // Initialise blendedEmailPct field from APP.config (default 20) before validateBlendedSplit
+  // derives the auto-remainder. This ensures the field has the correct value on fresh page load
+  // even though it no longer has a hardcoded value= attribute.
+  (function(){const _eEl=document.getElementById('blendedEmailPct');if(_eEl)_eEl.value=APP.config.blendedEmailPct??20;})();
   updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();validateEmailOccupancy();
   updateQueueGate();
   renderHCChannelPicker();buildHCPanelTabs();
