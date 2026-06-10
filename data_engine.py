@@ -348,6 +348,9 @@ def score_combination(
     # negative and inflating the score. Fix: cap = max(0, positive_component - 0.01)
     # ensures the ceiling is never negative. If positive_component <= 0.01, no penalty
     # is applied and the score equals the tiny positive_component — ranked last.
+    # WEIGHT SYNC WARNING: these weights (0.40 / 0.30 / 0.30) are also hardcoded in
+    # scoreCombo() in index.htm. Changing weights here without updating index.htm will
+    # cause Python-JS scoring divergence. Update both files simultaneously.
     positive_component = 0.40 * consistency_score + 0.30 * richness_score + 0.30 * recency_score
     raw_penalty = 0.3 * len([y for y in years_available if y in anomaly_years])
     penalty_cap = max(0.0, positive_component - 0.01)

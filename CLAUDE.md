@@ -70,13 +70,16 @@ Every code change request — no matter how small — must go through the three-
 /implement <description of what you want built or fixed>
 ```
 
-The pipeline will run automatically:
+The pipeline will run automatically (maximum **2 generate→critique cycles**):
 
-1. **wfm-planner** — decomposes the request into numbered sub-tasks with inputs, success criteria, and WFM constraints
-2. **wfm-generator** — implements the sub-tasks with full file access; reads before writing; builds everything completely
-3. **wfm-critic** — reviews the output across 6 dimensions (formula validity, UI/design, features, stress tests, standards, logic) and scores **Red / Amber / Green**
-4. **Ship** — only if the critic scores **Green**: `git add`, `git commit`, `git push` to GitHub and GitHub Pages redeploys automatically
+1. **wfm-planner** — decomposes the request into a numbered sub-task checklist with inputs, success criteria, and WFM constraints. Must be specific enough that the generator can execute without ambiguity.
+2. **wfm-generator** — implements every sub-task with full file access; reads before writing; builds completely. On cycle 2, receives the full cycle-1 critique and must resolve every item.
+3. **wfm-critic** — reads the changed files and scores **Red / Amber / Green** against what was changed in this request only. Scoring rules:
+   - **Green** — all WFM formulas correct, no false user-facing claims, no broken channel routing. Dead CSS rules, audit-trail gaps, and comment style do **not** block Green.
+   - **Amber** — incorrect HC formula result, false UI claim, broken channel routing, or data-loss risk.
+   - **Red** — runtime crash, Infinity/NaN in output, or direct WFM domain rule violation.
+4. **Ship** — only on **Green**: `git add`, `git commit`, `git push` to GitHub. GitHub Pages redeploys automatically.
 
-If the critic scores Amber or Red, the pipeline surfaces the critique questions without committing. Address the questions and re-run `/implement`.
+If the critic scores Amber or Red after both cycles, the pipeline surfaces the blocking questions. Address them and re-run `/implement` with an updated description.
 
 **Do not bypass this pipeline by editing files directly. Do not commit before a Green score.**

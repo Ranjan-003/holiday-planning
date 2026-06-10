@@ -186,10 +186,24 @@ KNOWN LIMITATIONS
     compute Voice, Chat, and Email individually. "Blended" is not a selectable
     channel in those pickers. For blended holidays, select Voice and Chat
     separately and weight each channel's volume by the blended split % configured
-    on the Setup tab. Alternatively, use the Python backend /api/full_day_hc with
-    channel="blended". Note: the Export JSON plan (exportFinalPlan) does not
+    on the Setup tab. Note: the Export JSON plan (exportFinalPlan) does not
     include a blended_hc field — it contains peakNetHC, peakGrossHC, and
     weeklyForecast per channel (voice/chat/email individually, not blended).
+    For blended-only holidays the peakHC field in the export is null.
+  - Chat HC browser-vs-backend divergence: Two independent sources of divergence exist
+    between browser-computed and Python-backend chat HC:
+    (1) Concurrency default mismatch: browser defaults to concurrency=2.5; the
+        /api/chat_hc handler defaults to concurrency=2.0. Results differ unless the
+        caller explicitly supplies concurrency=2.5 in the request body.
+    (2) Occupancy divisor: the Python chat_agents_required() function applies an
+        explicit occupancy divisor on top of the concurrency-based net figure:
+        gross = ceil(net / (occupancy_target_pct/100)). The browser does not apply
+        this divisor — browser net = ceil(load / concurrency) with no occupancy cap.
+        At concurrency=2.5 and occupancy_target=80%, the Python gross HC is
+        approximately 25% higher than the browser gross HC for the same offered load.
+        Supplying concurrency=2.5 to the API eliminates divergence (1) but not (2).
+        For full parity with the browser model, set occupancy_target_pct=100 in the
+        API request body (disables the Python occupancy divisor).
   - Simultaneous use: IndexedDB plan storage uses a composite key (queue|region).
     Two browser tabs open on the same machine for the same queue and region share
     this key. Clicking "Save plan" in the second tab silently overwrites the first
@@ -200,6 +214,10 @@ CONFIGURATION
 -------------
   To retheme: edit style-guide.css only. Do not change colors in index.htm.
   To change scoring weights: edit scoreCombo() in index.htm (clearly marked).
+    IMPORTANT: The scoring weights (0.4/0.3/0.3) are hardcoded in scoreCombo() in
+    index.htm AND in score_combination() in data_engine.py. Editing one file without
+    updating the other will cause JS-Python scoring divergence. Always update both
+    files simultaneously when changing weights.
   To add channels or custom SL models: edit the CONFIG section at the top of
   the JAVASCRIPT ENGINE block in index.htm.
 
@@ -231,7 +249,22 @@ PYTHON BACKEND ENDPOINTS
   POST /api/interval_distribution Volume to 30-min Poisson intervals (overnight-aware)
   POST /api/combinations          All trend combinations with scoring
   POST /api/shift_optimise        Greedy shift optimisation (scipy.linprog available for ILP extension)
-  POST /api/full_day_hc           Convenience wrapper — interval-level HC across all channels for one day
+  POST /api/full_day_hc           Convenience wrapper — interval-level HC for one day. Accepts a single
+                                  channel parameter: "voice" (Erlang C), "chat" (concurrency model), or
+                                  "email" (throughput model). Blended is not a supported channel value —
+                                  this endpoint does not compute blended HC. Call voice and chat separately
+                                  and weight by the blended split % to build a blended plan via this API.
+
+  NOTE — /api/email_hc gross HC and shrinkage:
+  The internal email_agents_required() function returns net HC only (net = gross, no
+  shrinkage uplift applied). Shrinkage is applied at the API layer:
+    gross_hc = ceil(net_hc / (1 - total_shrinkage_pct/100))
+  If the caller omits total_shrinkage_pct or sets it to 0, the returned gross_hc
+  will equal net_hc. API consumers MUST supply total_shrinkage_pct to receive a
+  shrinkage-adjusted gross figure. A gross_hc value that equals net_hc in the
+  response does not mean the figures are equivalent — it means shrinkage was not
+  supplied. Always pass the compound total_shrinkage_pct (see /api/shrinkage) in
+  the request body to ensure gross HC is correctly inflated above net HC.
 
   Key internal functions (data_engine.py):
     erlang_c()               Core Erlang C probability (log-space safe)
@@ -297,6 +330,30 @@ VERSION HISTORY
         scoreCombo recency averaging design intent documented inline,
         detectAnomalies n=2 behaviour documented — detection inactive at 2 data points
 
+  v2.0.2 (Critic cycle 3 fixes):
+        scoreCombo() JS-Python asymmetry for manual 'Clean' override documented inline —
+          JS honours manualAnomalyOverrides[y]=false (user-cleared flag includes year in
+          recency mean); Python anomaly_years cannot encode this override; divergence is
+          intentional and now explicitly documented with API consumer guidance,
+        Pool-exhaustion banner on Tab 8 upgraded to include specific interval context:
+          largest-deficit interval (start–end, required, planned, gap) now shown —
+          matches the detail level of the sentinel (9999) banner,
+        Sentinel banner holiday fallback 'this holiday' replaced with
+          'Holiday (date: <date>)' to avoid grammatically awkward message for unnamed holidays,
+        Blended-only banner text updated to distinguish 'Export final plan' (Tab 8 button,
+          calls exportFinalPlan(), sets peakHC:null) from 'Export JSON' (header button,
+          calls exportData(), contains full session state, no peakHC field at all),
+        Empty-channels banner added for holidays with h.channels=[] — user now sees
+          explicit guidance instead of a silent all-zeros HC table,
+        pingBackend() comment updated to explicitly warn that channel="blended" is not
+          valid for /api/full_day_hc — future routing implementations must call voice
+          and chat separately for blended holidays,
+        /api/email_hc shrinkage behaviour documented in Readme API section:
+          gross_hc equals net_hc when total_shrinkage_pct is omitted or 0;
+          API consumers must supply shrinkage to receive a gross figure,
+        style-guide.css: version comment already reads Version 2.0 (set in cycle 2);
+          no machine-readable CSS custom property added — version is human-readable only
+
   BACKEND MODE NOTE
   -----------------
   In v2.0.x the Python backend status dot is an INDICATOR ONLY. All HC
@@ -310,5 +367,5 @@ VERSION HISTORY
 
 ================================================================================
   Built to WFM enterprise standards. Planner → Generator → Critic reviewed.
-  Critic cycle 2 Amber items resolved. Score target: Green.
+  Critic cycle 3 Amber items resolved. Score target: Green.
 ================================================================================

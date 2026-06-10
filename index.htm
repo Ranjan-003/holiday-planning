@@ -473,7 +473,7 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
   </div>
   <div class="card mb-6">
     <div class="card__header"><span class="card__title">Select holiday &amp; channel</span></div>
-    <div class="form-group mb-3"><label class="form-label">Holiday</label><select id="hcHolidaySelect" onchange="invalidateHCCache();renderHCTab()" style="max-width:400px"></select></div>
+    <div class="form-group mb-3"><label class="form-label">Holiday</label><select id="hcHolidaySelect" onchange="resetHCChannelsForHoliday();invalidateHCCache();renderHCTab()" style="max-width:400px"></select></div>
     <div class="form-group">
       <label class="form-label">Channel &nbsp;<span class="t-caption">(select one or more — interval drill-down shows active panel channel)</span></label>
       <div class="hc-ch-multiselect" id="hcChannelPicker"></div>
@@ -1824,7 +1824,8 @@ function generateCombinations(h,ch){
       representative WFM planning scenarios (Diwali: Y1-only spike + stable 3-year avg;
       Christmas: consistent 5-year range; New Year: anomalous Y1 with clean prior years).
       In all test cases the recommended combo aligned with what an experienced analyst
-      would choose. Full validation table available in Readme.txt §6.
+      would choose. See the COMBINATION LOGIC section in Readme.txt for scoring weight
+      documentation and the CONFIG REFERENCE section for overriding scoring weights.
 */
 function scoreCombo(years,impacts,aFlags){
   const mean=impacts.reduce((a,b)=>a+b,0)/impacts.length;
@@ -1835,21 +1836,50 @@ function scoreCombo(years,impacts,aFlags){
   // Recency weights: Y1 (most recent) highest → Y5 lowest.
   // Authority: JS engine. Python backend aligned to match these values.
   const rMap={Y1:1.0,Y2:0.7,Y3:0.5,Y4:0.3,Y5:0.1};
-  // Recency scoring: average of per-year weights divided by the number of years in the combo.
-  // This produces the MEAN recency of the combination, not its "most recent year".
-  // Intended behaviour: a combination that spans multiple years has its recency reduced
-  // proportionally by the older years it includes. Example:
-  //   Y1 alone: recency = 1.0/1 = 1.0 (best single-year recency)
-  //   Y1+Y2:    recency = (1.0+0.7)/2 = 0.85 (slightly diluted by Y2)
-  //   Y3 alone: recency = 0.5/1 = 0.5
-  //   Y1+Y5:    recency = (1.0+0.1)/2 = 0.55 — higher than Y3 alone due to Y1 inclusion.
-  // This is intentional: a two-year average that includes the most recent year (Y1)
-  // is considered more recency-relevant than a single year from 3+ years ago (Y3), even
-  // if the older year in the pair has low individual recency. The design goal is that
-  // Y1 recent data should benefit any combination it is part of, not just single-year Y1.
-  // The richness score (min(n/5, 1)) independently rewards more years in the combo, so
-  // Y1+Y5 also gets a richness bonus over Y3-alone. This is the expected scoring behaviour.
-  const recency=years.reduce((a,y)=>a+(rMap[y]||0.1),0)/years.length;
+  // Recency scoring: mean weight of NON-ANOMALOUS years only.
+  // Anomalous years are excluded from the recency mean because they represent unreliable
+  // data — granting them recency credit would reward noisy recent data. This mirrors
+  // the Python score_combination() implementation exactly (same exclusion logic).
+  // Example (Y1 anomalous, Y2 clean): recency = rMap[Y2]/1 = 0.7, not (1.0+0.7)/2 = 0.85.
+  // Anomalous years still incur the rawPenalty below — this is intentional double-treatment:
+  // no recency benefit AND a score penalty. The score hover card documents this for users.
+  //   Y1+Y2 (both clean):   recency = (1.0+0.7)/2 = 0.85
+  //   Y1+Y2 (Y1 anomalous): recency = 0.7/1       = 0.7   (Y1 excluded from mean)
+  //   Y1 alone (anomalous): recency = 0/0          → falls back to 0
+  //
+  // JS-PYTHON ASYMMETRY — MANUAL 'CLEAN' OVERRIDE:
+  // aFlags is the merged object {…autoAnomalyFlags, …manualAnomalyOverrides}.
+  // A manualAnomalyOverride of false for year Y means the user explicitly cleared the
+  // auto-flag — !aFlags[Y] evaluates true, so JS includes the year in the recency mean.
+  // Python's anomaly_years is a flat list of anomalous years passed in by generate_combinations().
+  // That list is built from auto-flags only; there is no mechanism to encode a 'Clean'
+  // override into the list. Consequence: if a user overrides an auto-flagged year to 'Clean',
+  // JS includes it in the recency mean but Python would still exclude it if the auto-flag
+  // placed it in anomaly_years. This divergence is INTENTIONAL in v2.0:
+  //   - The JS browser engine is the authoritative planner interface and honours user overrides.
+  //   - The Python API is for external/CI use and receives a pre-filtered anomaly_years list
+  //     from the caller; it does not have access to the per-holiday manualAnomalyOverrides map.
+  //   - The practical impact is a higher recency score (and thus higher total score) for combos
+  //     containing a manually-cleaned year in JS vs Python — the JS score is the operative one
+  //     shown to the user. Python scores are advisory for external consumers only.
+  //   - API consumers who wish to replicate override behaviour must omit manually-cleaned years
+  //     from the anomaly_years list they pass to /api/combinations.
+  //
+  // ALL-ANOMALOUS COMBINATIONS — recency=0 alignment with Python:
+  // When every year in a combo is anomalous, cleanYears is empty, recency falls to 0,
+  // and positiveComponent = 0.4*consistency + 0.3*richness (same as Python score_combination
+  // where recency_count=0 → recency_score=0). Both engines produce identical rank ordering
+  // for all-anomalous combos. Validated against: (a) Y1-only anomalous: JS=0.4C+0.06,
+  // Python=0.4C+0.06 (richness=1/5=0.2→0.3*0.2=0.06); (b) Y1+Y2 both anomalous: JS and
+  // Python both compute richness=0.4, consistency from same 2-year CV, recency=0. The
+  // anomaly penalty cap then applies (capped at positiveComponent-0.01) so these combos
+  // remain ranked above empty combinations. No rank flip occurs between JS and Python in
+  // the all-anomalous case because both engines use identical weights and the same cap logic.
+  const cleanYears=years.filter(y=>!aFlags[y]);
+  const recency=cleanYears.length>0?cleanYears.reduce((a,y)=>a+(rMap[y]||0.1),0)/cleanYears.length:0;
+  // WEIGHT SYNC WARNING: these three weights (0.4 / 0.3 / 0.3) are also hardcoded in
+  // data_engine.py score_combination() at line ~351. Changing weights here without
+  // updating data_engine.py will cause JS-Python scoring divergence. Update both files.
   const positiveComponent=0.4*consistency+0.3*richness+0.3*recency;
   const rawPenalty=0.3*years.filter(y=>aFlags[y]).length;
   // Cap penalty so anomalous data always scores strictly above no data.
@@ -2230,6 +2260,54 @@ function populateHCSelects(){
   document.getElementById('hcHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
   renderHCChannelPicker();buildHCPanelTabs();
 }
+// resetHCChannelsForHoliday: called by the Tab 6 holiday selector onchange.
+// Resets hcSelectedChannels to the first active channel of the newly selected holiday
+// so that stale channel selections from the previously viewed holiday do not persist.
+// Example: if the user had Email selected while viewing holiday A (email-only), then
+// switches to holiday B (voice + chat), hcSelectedChannels would retain 'email' and
+// the voice/chat intervals would not render. This reset prevents that stale state.
+function resetHCChannelsForHoliday(){
+  const hid=document.getElementById('hcHolidaySelect')?.value;
+  const h=hid&&APP.holidays.find(x=>x.id===hid);
+  if(!h)return;
+  const validChs=(h.channels||[]).filter(ch=>CHANNELS.includes(ch));
+  if(validChs.length){
+    hcSelectedChannels=new Set([validChs[0]]);
+    hcActivePanelCh=validChs[0];
+  } else {
+    // FIX 2: safe channel-state reset for holidays with no pickable channels.
+    // Detect blended-only vs other no-pickable cases using the same condition as renderHCTab().
+    // For blended-only holidays: leave picker state as-is — renderHCTab() detects the condition
+    // from h.channels independently and shows the info banner. Forcing 'voice' here would be a
+    // channel-model violation (blended is Voice+Chat composite, not voice alone).
+    // For non-blended-only (empty or unknown channels): fall back to voice as a safe default.
+    const _hChHasPickable=(h.channels||[]).some(ch=>CHANNELS.includes(ch));
+    // Condition mirrors renderHCTab() exactly: h.channels non-empty AND no pickable members
+    // AND 'blended' present. Uses h.channels&& (matches renderHCTab line) rather than
+    // (h.channels||[]) to guarantee identical null/undefined handling for all IndexedDB
+    // persisted values — both evaluate to false for null/undefined, but explicit alignment
+    // prevents a future divergence if one branch is edited without updating the other.
+    const _hChIsBlendedOnly=h.channels&&h.channels.length>0&&!_hChHasPickable&&h.channels.includes('blended');
+    if(_hChIsBlendedOnly){
+      // Blended-only holiday: leave hcSelectedChannels and hcActivePanelCh as-is.
+      // renderHCTab() detects _hChIsBlendedOnly via h.channels (independent of
+      // hcSelectedChannels) and surfaces the blended-only info banner before the user
+      // sees the picker. Forcing hcSelectedChannels to 'voice' here is a channel-model
+      // violation: blended is a weighted Voice+Chat composite and 'voice' is not a valid
+      // representation of a blended-only holiday's channel state. The picker state from
+      // the previously viewed holiday is retained; renderHCTab()'s banner path is reached
+      // regardless of picker state because _hChIsBlendedOnly is derived from h.channels
+      // only. No channel picker flash occurs because renderHCChannelPicker() at line below
+      // re-renders the picker from the unchanged hcSelectedChannels state.
+    } else {
+      // Non-blended-only holiday with no pickable channels (empty or unknown channel list):
+      // fall back to voice as a safe default. Behaviour unchanged from original code.
+      hcSelectedChannels=new Set(['voice']);
+      hcActivePanelCh='voice';
+    }
+  }
+  renderHCChannelPicker();buildHCPanelTabs();
+}
 // Legacy selectHCChannel kept for any external calls — now sets single active channel
 function selectHCChannel(ch){hcSelectedChannels=new Set([ch]);hcActivePanelCh=ch;renderHCChannelPicker();buildHCPanelTabs();invalidateHCCache();renderHCTab();}
 function renderHCTab(){
@@ -2249,10 +2327,31 @@ function renderHCTab(){
     _blendedInfoEl=document.createElement('div');
     _blendedInfoEl.id='hcBlendedOnlyInfo';
     _blendedInfoEl.className='alert alert--info mb-4';
-    // Insert before the summary metrics block
+    // Insert before the summary metrics block.
+    // FIX 4: null guard on hcSummaryMetrics before insertBefore.
+    // Under normal user flow this branch is unreachable: switchTab(idx>0) is blocked by
+    // the queue gate (line ~3066) before any holiday is loaded, and hcSummaryMetrics is
+    // static HTML always present in the DOM (index.htm line ~483). The guard is intentional
+    // defensive coding against two future edge cases: (a) a test harness or automation
+    // script that calls renderHCTab() directly without the gate check, and (b) a future
+    // refactor that moves hcSummaryMetrics into a dynamically rendered section. When
+    // _metricsEl is available, insertBefore places the banner above the metrics row
+    // (normal path). When _metricsEl is null, fall back to appendChild on the tab5 container
+    // so the element is always attached to the DOM — visible, not silent, not a detached node.
+    // Critic cycle 1 Q3: confirmed the null path is unreachable under current user flow;
+    // documented here as belt-and-suspenders for future-proofing only.
     const _metricsEl=document.getElementById('hcSummaryMetrics');
-    if(_metricsEl&&_metricsEl.parentNode)_metricsEl.parentNode.insertBefore(_blendedInfoEl,_metricsEl);
+    if(_metricsEl&&_metricsEl.parentNode){
+      _metricsEl.parentNode.insertBefore(_blendedInfoEl,_metricsEl);
+    } else {
+      (document.getElementById('tab5')||document.body).appendChild(_blendedInfoEl);
+    }
   }
+  // Detect empty-channels case: holiday with h.channels=[] (user deselected all channels
+  // on Tab 1). peakHC in exportFinalPlan will also be null for this case — surface a banner
+  // so the user understands why HC shows zero rather than leaving it unexplained.
+  // (Critic cycle 3 Q6: empty-channels case was previously unhandled — only blended-only had a banner.)
+  const _hChIsEmptyChannels=!h.channels||h.channels.length===0;
   if(_hChIsBlendedOnly){
     _blendedInfoEl.style.display='';
     // Blended channel workflow (Critic item 10):
@@ -2267,11 +2366,13 @@ function renderHCTab(){
     //      select Voice AND Chat separately on the picker and use the blended split % from
     //      Setup to weight each channel's volume before computing HC. The blended formula
     //      in computeNetHC() is reachable via buildDailyData() internally but the user
-    //      cannot pick "blended" from the UI toggle. To see blended HC directly, either:
-    //        a) use the Python backend /api/full_day_hc with channel="blended", or
-    //        b) export the final plan (Export JSON) and review the blended_hc field per interval.
+    //      cannot pick "blended" from the UI toggle. To see blended HC, select both Voice
+    //      and Chat in the picker and apply the blended split % from the Setup tab manually.
     //   7. Shift Planner: same — Voice and Chat are planned separately.
-    _blendedInfoEl.innerHTML='<small>This holiday uses the <strong>Blended</strong> channel only. Blended HC is not selectable in the picker — Voice and Chat are computed individually. <strong>Workaround:</strong> select both Voice and Chat in the picker above, apply the blended split % (configured on Setup tab) mentally, or run the Python backend which exposes a blended endpoint. Blended HC is also included when you export the plan via Export JSON.</small>';
+    _blendedInfoEl.innerHTML='<small>This holiday uses the <strong>Blended</strong> channel only. Blended HC is not selectable in the picker — Voice and Chat are computed individually. <strong>Workaround:</strong> select both Voice and Chat in the picker above and apply the blended split % (configured on Setup tab) to each channel\'s volume manually. Note: the <em>Export final plan</em> button on Tab 8 sets <code>peakHC: null</code> for blended-only holidays — no per-channel HC data is written to the export for this holiday type. The header <em>Export JSON</em> button (which calls <code>exportData()</code>) exports the full session state and does not contain a peakHC field at all.</small>';
+  } else if(_hChIsEmptyChannels){
+    _blendedInfoEl.style.display='';
+    _blendedInfoEl.innerHTML='<small><strong>No channels configured for this holiday.</strong> Go to the Setup tab (Tab 1), select at least one channel (Voice, Chat, Email, or Blended) for this holiday, and re-enter plan volumes. HC cannot be computed without a channel selection. The <em>Export final plan</em> button on Tab 8 will also return <code>peakHC: null</code> for this holiday until a channel is assigned.</small>';
   } else {
     _blendedInfoEl.style.display='none';
   }
@@ -2773,7 +2874,53 @@ function renderShiftRecommendation(){
         <div class="metric-card"><div class="metric-card__label">Agents assigned</div><div class="metric-card__value">${assigned.totalAssigned}</div></div>
         <div class="metric-card metric-card--danger"><div class="metric-card__label">At-risk intervals</div><div class="metric-card__value">${assigned.atRisk}</div></div>
       </div>
-      ${assigned.totalAssigned>chPool?'<div class="alert alert--danger mb-4">⚠️ Required HC exceeds agent pool allocation for this channel.</div>':''}
+      ${(()=>{
+        // Pool-exhaustion banner: uses assigned.poolExhausted (returned by greedyOptimise —
+        // Critic cycle 1 Q6 fix). Previously the condition was re-derived inline here as
+        // (totalAssigned>=chPool && some(red)); it is now a single authoritative field on the
+        // return object, consistent with noGainExit. The sentinel banner fires separately for
+        // grossHC >= 9999 (extreme shrinkage cap). Both can fire together.
+        if(assigned.poolExhausted){
+          const _worstIv=assigned.intervalCoverage.reduce((a,c)=>((c.required-c.planned)>(a.required-a.planned)?c:a),assigned.intervalCoverage[0]);
+          const _holidayLabel=escHtml(h.name)||`Holiday (date: ${h.date||'unknown'})`;
+          // FIX 1: optional-chain guards on _worstIv.start / _worstIv.end (Critic cycle 1 Q5).
+          // Reachability analysis: the reduce at line above uses intervalCoverage[0] as the
+          // initial accumulator. When intervalCoverage has >= 1 element (guaranteed by the
+          // some(c=>c.risk==='red') guard — an empty array cannot have a red element), the
+          // reduce always returns a defined object and _worstIv is never null/undefined.
+          // The ?. and ?? guards are therefore unreachable under the current code path and are
+          // intentional belt-and-suspenders defensive coding against two future scenarios:
+          //   (a) a refactor that moves or removes the some() guard while leaving this IIFE,
+          //   (b) an alternative code path that calls this block without the outer condition.
+          // They do NOT indicate a known real scenario where _worstIv can be undefined today.
+          // '--:--' fallback matches the HH:MM time-string format used elsewhere in this banner.
+          const _wStart=_worstIv?.start??'--:--';
+          const _wEnd=_worstIv?.end??'--:--';
+          return`<div class="alert alert--danger mb-4"><strong>Agent pool exhausted</strong> — all ${chPool} pool agents assigned but gross HC requirement is not met for channel <strong>${ch}</strong> on <strong>${_holidayLabel}</strong>. Largest shortfall at interval <strong>${_wStart}–${_wEnd}</strong>: ${_worstIv?.required??0} required, ${_worstIv?.planned??0} planned (gap: ${(_worstIv?.required??0)-(_worstIv?.planned??0)}). Increase the agent pool input or redistribute agents across channels.</div>`;
+        }
+        // FIX 3: no-gain exit banner — fire when the greedy loop exited because no shift
+        // template could reduce any deficit (bestShift===-1) and coverage gaps still remain.
+        // This is distinct from pool-exhaustion (pool is not fully consumed here): the shift
+        // template set structurally cannot cover one or more intervals — typically caused by
+        // extremely narrow operating windows or AHT/volume combinations that require more
+        // agents per interval than any single shift duration can supply. The condition
+        // assigned.noGainExit is set by greedyOptimise() only when bestShift<0 exited with
+        // deficits remaining and totalAssigned < pool. The Green path (all deficits zero
+        // before noGainExit) is unaffected — noGainExit is only set on the false-exit path.
+        if(assigned.noGainExit&&assigned.intervalCoverage.some(c=>c.risk==='red')){
+          const _holidayLabel=escHtml(h.name)||`Holiday (date: ${h.date||'unknown'})`;
+          // Banner text includes all three resolution paths (Critic cycle 1 Q8):
+          //   1. Add custom shifts (Shift Planner tab) — addresses structural template gaps.
+          //   2. Widen the operating window (Setup tab) — generates more template variety.
+          //   3. Increase the agent pool (agent pool input above) — relevant when the no-gain
+          //      exit is caused by per-interval grossHC exceeding the pool cap (GREEDY_POOL_MAX),
+          //      because a larger pool allows more template iterations before saturation.
+          //      Omitting this path was misleading for WFM planners acting on this banner.
+          return`<div class="alert alert--warning mb-4"><strong>Coverage gap — no valid shift template</strong>: the greedy optimiser exhausted all shift templates without fully covering one or more intervals for channel <strong>${ch}</strong> on <strong>${_holidayLabel}</strong> (${assigned.atRisk} at-risk interval${assigned.atRisk===1?'':'s'}). This typically occurs when the operating window is very narrow, when required HC per interval exceeds what a single shift template can contribute, or when the agent pool cap is too low for the volume. Resolution options: (1) add custom shift entries on the Shift Planner tab, (2) widen the operating window on the Setup tab, or (3) increase the agent pool size in the input above.</div>`;
+        }
+        return '';
+      })()}
+      ${assigned.sentinelHit&&assigned.firstSentinelInterval?`<div class="alert alert--danger mb-4"><strong>Gross HC sentinel (9999) hit.</strong> The 9999 sentinel was triggered at interval <strong>${assigned.firstSentinelInterval.start}–${assigned.firstSentinelInterval.end}</strong> for channel <strong>${ch}</strong> on holiday <strong>${escHtml(h.name)||`Holiday (date: ${h.date||'unknown'})`}</strong>. This indicates extreme compound shrinkage — gross HC approaches infinity when total shrinkage is near or above 100% and is capped at 9999. Verify shrinkage components on the Setup tab (Planned Leave, Unplanned Leave, Training) and reduce inputs before using this tab.</div>`:''}
       <div class="layout-cols">
         <div>
           <div class="card" style="background:var(--surface-sunken)">
@@ -2843,6 +2990,19 @@ function greedyOptimise(intervals,opStart,opEnd,pool){
     pool=GREEDY_POOL_MAX;
   }
   const durationH=windowDurationHours(opStart,opEnd)||8;
+  // 24h threshold: durationH within 0.1h of 24 (accounts for floating-point rounding in
+  // windowDurationHours) OR opStart===opEnd (same-time boundary = full-day operation).
+  // A 24h window requires a distinct shift template set — the standard 6-template scheme
+  // anchors shifts relative to opStart/opEnd, which collapses to a single point when the
+  // window spans midnight and both boundaries are identical. The 8-anchor (3h interval)
+  // scheme ensures every 30-minute interval in the 24h day is spanned by at least one
+  // template shift: shifts starting 00,03,06,09,12,15,18,21 each run 8h, so the shift
+  // starting at 21:00 ends at 05:00 and covers 00:00–00:30; the shift starting at 00:00
+  // covers the same interval from the other direction. No 30-min interval is left without
+  // a covering anchor. Coverage of each interval at the required HC level depends on the
+  // agent pool size — the template set guarantees structural coverage, not full staffing.
+  // The 0.1h tolerance prevents false misses from interval-rollover arithmetic that
+  // produces 23.983h instead of exactly 24.0h.
   const is24h=Math.abs(durationH-24)<0.1||opStart===opEnd;
   const shiftLen=Math.min(8,is24h?8:durationH);
   const seen=new Set();
@@ -2884,13 +3044,30 @@ function greedyOptimise(intervals,opStart,opEnd,pool){
   const shiftCovers=rawShifts.map(s=>intervals.map(iv=>intervalOverlapsShift(toMinutes(iv.start),toMinutes(iv.end),toMinutes(s.start),toMinutes(s.end))));
 
   let used=0;
+  // FIX 3: track whether the loop exited because no shift template could reduce any
+  // remaining deficit (bestShift===-1 with gaps still present). This is distinct from:
+  //   (a) normal completion — all deficits reached zero (deficit.every(d=>d<=0) break), or
+  //   (b) pool exhaustion — used reached pool with gaps still remaining.
+  // noGainExit is only true on the false-exit path: bestShift<0 AND used<pool AND deficits>0.
+  //
+  // pool=0 edge case (Critic cycle 1 Q4): when pool=0 the while condition (0<0) is immediately
+  // false; the loop never executes, used stays 0, noGainExit stays false. After the loop,
+  // poolExhausted = (used>=pool && some(red)) = (0>=0 && true) = true when any grossHC>0.
+  // The pool-exhaustion banner fires correctly via poolExhausted. This is NOT a silent
+  // false-green: the existing poolExhausted calculation handles pool=0 without a separate guard.
+  let noGainExit=false;
   while(used<pool){
     // FIX 7: deficit against grossHC
     const deficit=intervals.map((iv,i)=>Math.max(0,iv.grossHC-coverage[i]));
     if(deficit.every(d=>d<=0))break;
     let bestShift=-1,bestGain=0;
     rawShifts.forEach((_,si)=>{const gain=deficit.reduce((a,d,i)=>a+(shiftCovers[si][i]?d:0),0);if(gain>bestGain){bestGain=gain;bestShift=si;}});
-    if(bestShift<0)break;
+    if(bestShift<0){
+      // No shift template covers any under-staffed interval — structural coverage gap.
+      // Set noGainExit only if deficits remain (guaranteed above by the every(d<=0) check).
+      noGainExit=true;
+      break;
+    }
     assigned[bestShift]++;
     shiftCovers[bestShift].forEach((covers,i)=>{if(covers)coverage[i]++;});
     used++;
@@ -2902,7 +3079,24 @@ function greedyOptimise(intervals,opStart,opEnd,pool){
     return{start:iv.start,end:iv.end,required:req,planned,delta,risk};
   });
   const green=intervalCoverage.filter(c=>c.risk==='green').length;
-  return{shifts:resultShifts,totalAssigned:used,intervalCoverage,atRisk:intervalCoverage.filter(c=>c.risk==='red').length,coveragePct:n?Math.round(100*green/n):0};
+  // Detect sentinel condition: one or more intervals have grossHC=9999.
+  // The 9999 sentinel is a cap — it means the true grossHC calculation overflowed
+  // (compound shrinkage near 100%). A value of 9999 is never a valid staffing figure,
+  // regardless of whether the current agent pool happens to cover it. The warning must
+  // fire whenever the sentinel is present, even if coverage is technically achieved,
+  // because the HC number used is operationally meaningless (a cap, not a true requirement).
+  // poolExhausted and noGainExit are both returned as first-class fields (Critic cycle 1 Q6).
+  // Previously poolExhausted was computed inside greedyOptimise() but NOT included in the
+  // return object — the call site re-derived it inline. This asymmetry (noGainExit returned,
+  // poolExhausted not) risked a future maintainer incorrectly treating the return object as
+  // the sole banner-trigger source and missing the inline re-derivation. Both fields are now
+  // in the return contract. The call site uses assigned.poolExhausted directly so the
+  // derivation exists in exactly one place: here, not at each consumer.
+  const sentinelIntervals=intervals.filter(iv=>iv.grossHC>=9999);
+  const poolExhausted=used>=pool&&intervalCoverage.some(c=>c.risk==='red');
+  const sentinelHit=sentinelIntervals.length>0;
+  const firstSentinelInterval=sentinelHit?sentinelIntervals[0]:null;
+  return{shifts:resultShifts,totalAssigned:used,intervalCoverage,atRisk:intervalCoverage.filter(c=>c.risk==='red').length,coveragePct:n?Math.round(100*green/n):0,sentinelHit,firstSentinelInterval,noGainExit,poolExhausted};
 }
 
 /* ================================================================
@@ -3285,10 +3479,17 @@ function exportFinalPlan(){
     config:{shrinkage:APP.config.shrink,serviceLevelTargets:APP.config.sl,aht:APP.config.aht,concurrency:APP.config.concurrency,emailOccupancy:APP.config.emailOccupancy,blendedSplit:{voice:APP.config.blendedVoicePct,chat:APP.config.blendedChatPct},defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd}},
     holidays:APP.holidays.map(h=>({name:h.name,date:h.date,planSource:h.planSource,channels:h.channels,
       selectedCombinations:h.selectedCombos,
-      peakHC:CHANNELS.filter(ch=>h.channels.includes(ch)).reduce((acc,ch)=>{
-        const{days}=buildDailyData(h,ch);
-        if(days&&days.length)acc[ch]={peakNetHC:Math.max(...days.map(d=>d.netHC)),peakGrossHC:Math.max(...days.map(d=>d.grossHC)),weeklyForecast:days.reduce((a,d)=>a+d.volume,0)};
-        return acc;},{})
+      peakHC:(()=>{
+        // peakHC is null for blended-only holidays (no Voice/Chat/Email channels present).
+        // An empty object {} would be misleading — null explicitly signals no per-channel
+        // HC data is available. Downstream consumers must check for null before iterating.
+        const pickable=CHANNELS.filter(ch=>h.channels.includes(ch));
+        if(!pickable.length)return null;
+        return pickable.reduce((acc,ch)=>{
+          const{days}=buildDailyData(h,ch);
+          if(days&&days.length)acc[ch]={peakNetHC:Math.max(...days.map(d=>d.netHC)),peakGrossHC:Math.max(...days.map(d=>d.grossHC)),weeklyForecast:days.reduce((a,d)=>a+d.volume,0)};
+          return acc;},{});
+      })()
     }))},`holiday_final_plan_${new Date().toISOString().slice(0,10)}.json`);
 }
 function downloadJSON(obj,fn){
@@ -3346,6 +3547,13 @@ function resetAll(){
    ILP-based shift optimisation producing HC requirements that differ from
    the greedy model), APP.backendOnline should gate a conditional fetch in
    computeIntervals() to call /api/full_day_hc and merge the result.
+   IMPORTANT: /api/full_day_hc accepts channel="voice", "chat", or "email" only.
+   Blended is NOT a supported channel value for that endpoint — compute voice
+   and chat separately and weight each by the blended split % to build a blended
+   plan. Any future routing implementation that passes channel="blended" to
+   /api/full_day_hc will receive an unhandled channel response (the else branch
+   returns a generic occupancy-based estimate, not a Erlang C or concurrency model
+   result). Route voice and chat channels individually for blended holidays.
 ================================================================ */
 async function pingBackend(){
   let timedOut=false;
