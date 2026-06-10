@@ -771,16 +771,21 @@ async function saveQueuePlan(){
     type:APP.queue.type||document.getElementById('queueType').value||'DB',
     savedAt:new Date().toISOString(),detectedBaseYear:APP.detectedBaseYear,
     holidays:APP.holidays,config:safeConfig};
-  await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).put(payload);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
+  await new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).put(payload);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
   alert(`Plan saved for queue "${name}" (${region}).`);
 }
 async function listSavedPlans(){
-  if(!idb)return[];
-  return new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readonly');const req=tx.objectStore(STORE).getAll();req.onsuccess=()=>res(req.result||[]);req.onerror=e=>rej(e.target.error);});
+  // Await idbReady with a 3 s timeout before reading — mirrors saveQueuePlan() race pattern.
+  // Without this, clicking "Load saved plan" within the first few hundred ms of page load
+  // finds idb===null (IndexedDB not yet open) and silently returns [] even when plans exist.
+  const db=await Promise.race([idbReady,new Promise(r=>setTimeout(()=>r(null),3000))]);
+  if(!db)return[];
+  return new Promise((res,rej)=>{const tx=db.transaction(STORE,'readonly');const req=tx.objectStore(STORE).getAll();req.onsuccess=()=>res(req.result||[]);req.onerror=e=>rej(e.target.error);});
 }
 async function deleteSavedPlan(planKey){
-  if(!idb)return;
-  await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).delete(planKey);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
+  const db=await Promise.race([idbReady,new Promise(r=>setTimeout(()=>r(null),3000))]);
+  if(!db)return;
+  await new Promise((res,rej)=>{const tx=db.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).delete(planKey);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
 }
 async function openLoadModal(){
   const plans=await listSavedPlans();
@@ -797,9 +802,10 @@ async function openLoadModal(){
 }
 function closeLoadModal(){document.getElementById('loadModal').classList.add('hidden');}
 async function restoreQueuePlan(planKey){
-  if(!idb)return;
+  const db=await Promise.race([idbReady,new Promise(r=>setTimeout(()=>r(null),3000))]);
+  if(!db){alert('Storage is not ready yet. Please wait a moment and try again.');return;}
   // planKey is the raw composite key stored in IndexedDB — never HTML-escaped
-  const p=await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readonly');const req=tx.objectStore(STORE).get(planKey);req.onsuccess=()=>res(req.result);req.onerror=e=>rej(e.target.error);});
+  const p=await new Promise((res,rej)=>{const tx=db.transaction(STORE,'readonly');const req=tx.objectStore(STORE).get(planKey);req.onsuccess=()=>res(req.result);req.onerror=e=>rej(e.target.error);});
   if(!p){alert('Plan not found.');return;}
   // Require both name and region before setting queueConfirmed (Issue 18)
   const restoredName=(p.queueName||'').trim();
@@ -2117,11 +2123,31 @@ function renderHistoricalAnalysis(){
     return`<div class="card mb-6">
       <div class="card__header"><div><div class="card__title">${escHtml(h.name)||'Unnamed'}</div>
       <div class="card__subtitle">${h.date||'No date'} &nbsp;·&nbsp; <span class="badge badge--${h.planSource==='WFM Forecast'?'blue':'purple'}">${h.planSource}</span></div></div></div>
-      ${CHANNELS.filter(ch=>h.channels.includes(ch)).map(ch=>`
-      <div class="mb-4"><div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
+      ${CHANNELS.filter(ch=>h.channels.includes(ch)).map(ch=>{
+        // Detect whether any year slots have year labels AND actual volume > 0 for this channel.
+        // Checking only h.years[y]?.year (label present) is insufficient: a slot where the user
+        // entered a year label but left actual volume at 0 passes the label check and renders a
+        // table row with act=0 and an impact% computed against planVolume. The actionable warning
+        // ('go back and fill in historical data') is never shown, and the table appears but conveys
+        // no useful information. Requiring actual[ch] > 0 ensures the table only renders rows that
+        // carry real volume data, and the warning branch fires correctly when no such rows exist.
+        const slotsWithYear=YEAR_SLOTS.filter(y=>h.years[y]?.year&&(h.years[y]?.actual?.[ch]||0)>0);
+        if(!slotsWithYear.length){
+          // No year data entered at all — surface a clear setup guide rather than a blank table.
+          // This is the most common new-user confusion: they enter planVolume on Tab 1 and click
+          // Continue without also filling in the historical year slots. Tabs 3-7 all depend on at
+          // least one year slot having both a year label and an actual volume.
+          return`<div class="mb-4">
+            <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
+            <div class="alert alert--warning">
+              <small><strong>No historical year data entered for ${ch}.</strong> Go back to the Setup tab (Tab 1) and fill in the Historical data section for this holiday: enter the <em>calendar year</em> (e.g. ${getBaseYear()-1}) and <em>Actual volume</em> for at least one year slot (Y1 = most recent). Once year data is saved, this tab will show impact % and anomaly analysis. Plan volume entered here (${(h.planVolume[ch]||0).toLocaleString()}) is used as the forecast baseline on Tab 3 (Combinations) when no baseline is entered.</small>
+            </div>
+          </div>`;
+        }
+        return`<div class="mb-4"><div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
         <div class="table-wrap"><table class="data-table">
           <thead><tr><th>Year</th><th class="th--right">Actual</th><th class="th--right">Baseline</th><th class="th--right">Impact %</th><th class="th--center">Anomaly</th><th class="th--center">Override</th></tr></thead>
-          <tbody>${YEAR_SLOTS.filter(y=>h.years[y]?.year).map(y=>{
+          <tbody>${slotsWithYear.map(y=>{
             const act=h.years[y].actual[ch]||0,base=h.years[y].baseline[ch]||0;
             // When no baseline is entered, fall back to planVolume[ch] for impact% display —
             // mirrors the generateCombinations() fallback so Tab 2 and Tab 3 show consistent numbers.
@@ -2144,10 +2170,10 @@ function renderHistoricalAnalysis(){
             </tr>`;}).join('')}
           </tbody>
         </table></div>
-        ${YEAR_SLOTS.filter(y=>h.years[y]?.year).some(y=>!(h.years[y].baseline[ch]||0)&&(h.planVolume[ch]||0)>0&&(h.years[y].actual[ch]||0)>0)?
+        ${slotsWithYear.some(y=>!(h.years[y].baseline[ch]||0)&&(h.planVolume[ch]||0)>0&&(h.years[y].actual[ch]||0)>0)?
           `<div class="alert alert--info mt-2" style="font-size:var(--text-xs)"><small>* Baseline not entered for one or more years — plan volume (${(h.planVolume[ch]||0).toLocaleString()}) is used as the comparison baseline. Impact % is relative to plan volume. Enter baseline volumes on the Setup tab to use historical baselines instead.</small></div>`:''
         }
-      </div>`).join('')}
+      </div>`;}).join('')}
     </div>`;
   }).join('');
 }
