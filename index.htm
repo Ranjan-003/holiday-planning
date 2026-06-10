@@ -109,6 +109,19 @@
 /* ── Holiday upload strip ── */
 .holiday-upload-strip{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--surface-sunken);border-radius:var(--radius-md);border:1px solid var(--border-subtle);margin-bottom:var(--sp-4)}
 .holiday-upload-strip .t-caption{flex:1}
+/* ── Daily volume grid (7-day expandable per year slot) ── */
+.dvg-toggle{display:flex;align-items:center;gap:var(--sp-2);cursor:pointer;padding:var(--sp-2) 0;border:none;background:none;font-family:var(--font-sans);font-size:var(--text-xs);color:var(--text-secondary);font-weight:var(--weight-medium);width:100%;text-align:left;transition:color var(--transition-fast)}
+.dvg-toggle:hover{color:var(--text-primary)}
+.dvg-toggle__arrow{display:inline-block;transition:transform var(--transition-fast);font-style:normal;font-size:9px;opacity:.6}
+.dvg-toggle.open .dvg-toggle__arrow{transform:rotate(90deg)}
+.dvg-grid{display:none;margin-top:var(--sp-2)}
+.dvg-grid.open{display:block}
+.dvg-row{display:grid;grid-template-columns:repeat(7,1fr) 80px;gap:var(--sp-1);align-items:end}
+.dvg-row__head{display:grid;grid-template-columns:repeat(7,1fr) 80px;gap:var(--sp-1);margin-bottom:2px}
+.dvg-col-label{font-size:9px;color:var(--text-tertiary);text-align:center;font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.04em}
+.dvg-col-label--total{color:var(--text-secondary)}
+.dvg-input{height:26px;font-size:var(--text-xs);font-family:var(--font-mono);text-align:center;padding:0 var(--sp-1)}
+.dvg-total{height:26px;font-size:var(--text-xs);font-family:var(--font-mono);text-align:center;padding:0 var(--sp-1);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--text-secondary);display:flex;align-items:center;justify-content:center}
 /* ── HC channel multi-select (replaces dropdown in tab 6) ── */
 .hc-ch-multiselect{display:flex;gap:var(--sp-2);flex-wrap:wrap;margin-top:var(--sp-2)}
 /* ── Shrinkage individual-component warning ── */
@@ -758,7 +771,40 @@ async function restoreQueuePlan(planKey){
   document.getElementById('queueType').value=p.type||'DB';
   APP.queue={name:restoredName,region:restoredRegion,type:p.type||'DB'};
   APP.detectedBaseYear=p.detectedBaseYear||null;
-  APP.holidays=p.holidays||[];
+  // Restore holidays with dailyVolumes/holidayDowSplit migration for plans saved before this feature.
+  APP.holidays=(p.holidays||[]).map(h=>{
+    // Ensure dailyVolumes exists with correct structure
+    if(!h.dailyVolumes||typeof h.dailyVolumes!=='object'){
+      const dv={};YEAR_SLOTS.forEach(y=>{dv[y.toLowerCase()]=[null,null,null,null,null,null,null];});
+      h.dailyVolumes=dv;
+    } else {
+      YEAR_SLOTS.forEach(y=>{
+        const slotKey=y.toLowerCase();
+        if(!Array.isArray(h.dailyVolumes[slotKey])){h.dailyVolumes[slotKey]=[null,null,null,null,null,null,null];}
+        else{const padded=h.dailyVolumes[slotKey].slice(0,7);while(padded.length<7)padded.push(null);h.dailyVolumes[slotKey]=padded;}
+      });
+    }
+    // Validate and migrate holidayDowSplit.
+    // v2.0 stores holidayDowSplit as a per-slot map {y1:null|[...], y2:null|[...], ...}.
+    // Plans saved before this change may have holidayDowSplit as a flat 7-element array
+    // (old single-slot shape) or as null. Migrate both legacy shapes to the per-slot map.
+    if(!h.holidayDowSplit||typeof h.holidayDowSplit!=='object'||Array.isArray(h.holidayDowSplit)){
+      // Legacy: null, or old flat array — reset to per-slot map with all nulls
+      const _newSplit={};YEAR_SLOTS.forEach(y=>{_newSplit[y.toLowerCase()]=null;});
+      h.holidayDowSplit=_newSplit;
+    } else {
+      // Per-slot map exists — validate each slot entry
+      YEAR_SLOTS.forEach(y=>{
+        const sk=y.toLowerCase();
+        const entry=h.holidayDowSplit[sk];
+        if(Array.isArray(entry)&&entry.length===7){
+          const ss=entry.reduce((a,b)=>a+(+b||0),0);
+          if(ss<=0.1)h.holidayDowSplit[sk]=null;
+        } else {h.holidayDowSplit[sk]=null;}
+      });
+    }
+    return h;
+  });
   // Deep-merge config preserving shrink components (Issue 3 + 5)
   const restored=p.config||{};
   APP.config=Object.assign({},APP.config,restored);
@@ -1531,11 +1577,22 @@ function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 function _emptyYear(){return{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}};}
 function newHoliday(id){
   const years={};YEAR_SLOTS.forEach(y=>{years[y]=_emptyYear();});
+  // dailyVolumes: keyed by year slot (y1..y5), each a 7-element array [Sat,Sun,Mon,Tue,Wed,Thu,Fri].
+  // null entries mean "not entered" — treated as 0 in sums but distinguished from an explicit 0.
+  // holidayDowSplit: per-slot map keyed by lowercase year slot (y1..y5).
+  // Each value is either a 7-element array of percentages (summing to 100) or null.
+  // null means "not yet derived" — buildDailyData falls back to h.dowSplit[ch] for that slot.
+  // Storing per-slot avoids last-write-wins corruption when the user enters daily volumes
+  // for multiple year slots with genuinely different day-of-week patterns.
+  const dailyVolumes={};YEAR_SLOTS.forEach(y=>{dailyVolumes[y.toLowerCase()]=[null,null,null,null,null,null,null];});
+  const holidayDowSplit={};YEAR_SLOTS.forEach(y=>{holidayDowSplit[y.toLowerCase()]=null;});
   return{id,name:'',date:'',channels:['voice'],planSource:'WFM Forecast',
     planVolume:{voice:0,chat:0,email:0,blended:0},
     operatingHoursOverride:false,operatingHours:{start:'08:00',end:'20:00'},
     years,autoAnomalyFlags:{},manualAnomalyOverrides:{},
     dowSplit:{voice:[...DEFAULT_DOW_SPLIT],chat:[...DEFAULT_DOW_SPLIT],email:[...DEFAULT_DOW_SPLIT],blended:[...DEFAULT_DOW_SPLIT]},
+    dailyVolumes,
+    holidayDowSplit,
     selectedCombos:{},combinations:{}};
 }
 
@@ -1629,7 +1686,13 @@ function renderHolidayList(resetPage){
       </div>
       <label class="form-label mb-3">Historical data (weekly volume) — <span style="font-size:var(--text-xs);color:var(--text-tertiary)">Y1 = most recent year</span></label>
       <div class="holiday-year-grid">
-        ${YEAR_SLOTS.map(y=>`<div class="year-block">
+        ${YEAR_SLOTS.map(y=>{
+          const slotKey=y.toLowerCase();
+          const dvArr=(h.dailyVolumes&&h.dailyVolumes[slotKey])||[null,null,null,null,null,null,null];
+          // Compute week total from dvArr for display in the grid
+          const dvWeekTotal=dvArr.reduce((s,v)=>s+(v!=null?+v:0),0);
+          const anyEntered=dvArr.some(v=>v!=null&&v!=='');
+          return`<div class="year-block">
           <div class="year-block__label">${getYearLabel(y)}</div>
           <input type="number" placeholder="Calendar year" value="${(h.years[y]||{}).year||''}"
             oninput="setHVal('${h.id}','years.${y}.year',this.value)">
@@ -1645,7 +1708,32 @@ function renderHolidayList(resetPage){
             <input type="number" value="${(h.years[y]&&h.years[y].baseline[ch])||0}"
               oninput="setHVal('${h.id}','years.${y}.baseline.${ch}',+this.value)">
           </div>`).join('')}
-        </div>`).join('')}
+          <button type="button" class="dvg-toggle${anyEntered?' open':''}" id="dvg_toggle_${h.id}_${slotKey}"
+            onclick="toggleDVG('${h.id}','${slotKey}')">
+            <i class="dvg-toggle__arrow">&#9654;</i>
+            <span>${(()=>{
+              const _hds=h.holidayDowSplit;
+              const _hasSplit=_hds&&typeof _hds==='object'&&!Array.isArray(_hds)&&Array.isArray(_hds[slotKey]);
+              if(anyEntered&&_hasSplit)return'Daily volumes + DOW split active';
+              if(anyEntered)return'Daily volumes entered';
+              return'Enter daily volumes';
+            })()}</span>
+          </button>
+          <div class="dvg-grid${anyEntered?' open':''}" id="dvg_grid_${h.id}_${slotKey}">
+            <div class="dvg-row__head">
+              ${DAYS.map(d=>`<span class="dvg-col-label">${d}</span>`).join('')}
+              <span class="dvg-col-label dvg-col-label--total">Total</span>
+            </div>
+            <div class="dvg-row">
+              ${DAYS.map((d,di)=>`<input type="number" class="dvg-input" min="0" step="1"
+                id="dvg_inp_${h.id}_${slotKey}_${di}"
+                value="${dvArr[di]!=null?dvArr[di]:''}" placeholder="0"
+                oninput="onDVGInput('${h.id}','${slotKey}',${di},this.value)">`).join('')}
+              <div class="dvg-total" id="dvg_total_${h.id}_${slotKey}">${anyEntered?dvWeekTotal.toLocaleString():'—'}</div>
+            </div>
+          </div>
+        </div>`;
+        }).join('')}
       </div>
     </div>`;
   }).join('')+showMoreHTML;
@@ -2084,12 +2172,29 @@ function renderDailyBreakdown(){
         const combos=h.combinations[ch]||generateCombinations(h,ch);
         const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
         if(!sel)return`<p class="t-caption">No forecast for ${ch}</p>`;
-        const wkVol=sel.forecasted;const splits=h.dowSplit[ch];
+        const wkVol=sel.forecasted;
+        // For Tab 5 display, use the same split resolution as buildDailyData:
+        // per-slot holidayDowSplit if available for the selected combination's slot,
+        // else fall back to h.dowSplit[ch]. This ensures the per-day % shown in Tab 5
+        // matches the per-day volumes used by the HC calculation in Tab 6.
+        let _tab5SlotKey=null;
+        if(sel.years&&sel.years.length===1){_tab5SlotKey=sel.years[0].toLowerCase();}
+        else if(sel.years&&sel.years.length>1){
+          const _sorted=[...sel.years].sort((a,b)=>YEAR_SLOTS.indexOf(a)-YEAR_SLOTS.indexOf(b));
+          _tab5SlotKey=_sorted[0].toLowerCase();
+        }
+        const _perSlotSplit=_tab5SlotKey&&h.holidayDowSplit&&
+          typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?
+          h.holidayDowSplit[_tab5SlotKey]:null;
+        const _useHolidaySplit=Array.isArray(_perSlotSplit)&&_perSlotSplit.length===7;
+        const splits=_useHolidaySplit?_perSlotSplit:h.dowSplit[ch];
         const splitSum=splits.reduce((a,b)=>a+b,0);
         const eff=splitSum>0?splits.map(s=>s/splitSum*100):splits.map(()=>100/7);
         return`<div class="mb-4">
           <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span>
-            <span class="t-caption">Weekly: <strong>${wkVol.toLocaleString()}</strong> · ${sel.combo}</span></div>
+            <span class="t-caption">Weekly: <strong>${wkVol.toLocaleString()}</strong> · ${sel.combo}</span>
+            ${_useHolidaySplit?`<span class="badge badge--blue" style="font-size:10px" title="Using per-day volumes entered in the daily volume grid for slot ${_tab5SlotKey?_tab5SlotKey.toUpperCase():''}">DOW: daily grid</span>`:`<span class="badge badge--gray" style="font-size:10px" title="Using global day-of-week split from the controls above">DOW: global split</span>`}
+          </div>
           ${Math.abs(splitSum-100)>0.5&&splitSum>0?`<div class="alert alert--warning mb-2"><small>⚠️ Splits sum to ${splitSum.toFixed(1)}% — normalised automatically.</small></div>`:''}
           ${wkVol===0?'<div class="alert alert--warning mb-2"><small>⚠️ Forecast is 0 for this channel.</small></div>':''}
           <div class="day-volume-grid">${DAYS.map((d,di)=>{
@@ -2116,6 +2221,104 @@ function setDowSplit(hid,ch,di,val){const h=APP.holidays.find(x=>x.id===hid);if(
 function resetDowSplit(hid){const h=APP.holidays.find(x=>x.id===hid);if(!h)return;CHANNELS.forEach(ch=>{h.dowSplit[ch]=[...DEFAULT_DOW_SPLIT];});invalidateAllCaches();renderDailyBreakdown();}
 
 /* ================================================================
+   DAILY VOLUME GRID — 7-day expandable inputs per year slot
+   toggleDVG: expand/collapse without re-rendering the full list.
+   onDVGInput: handles input on a single day cell —
+     (a) updates h.dailyVolumes[slotKey][di]
+     (b) recomputes weekTotal and updates the read-only total cell
+     (c) derives h.holidayDowSplit[slotKey] as a 7-element % array
+         (summing to exactly 100, floating-point corrected across all
+         positions, not just the last) or sets it to null when all
+         inputs are blank or weekTotal is 0.
+   Write-back design:
+     - The daily volume grid captures cross-channel totals for a year
+       slot. There is no reliable per-channel mapping from a single
+       aggregate total, so NO write-back to h.years[y].actual[ch] is
+       performed. Per-channel actual volumes must be entered directly
+       in the year-slot actual fields on the holiday card.
+     - holidayDowSplit is stored per slot (y1..y5) — last-slot-wins
+       corruption between Y1 and Y2 daily volumes is eliminated.
+     - allBlank treats null, empty string, AND the number 0 the same
+       for display purposes: a slot where every cell is 0 shows '0'
+       in the total cell (not '—') because weekTotal=0, which triggers
+       the weekTotal===0 branch that sets the split to null and shows
+       the formatted '0' string.
+     - If all 7 cells are blank (null or ''), the total cell shows '—'
+       and holidayDowSplit[slotKey] is set to null.
+     - If all 7 cells are numeric 0, weekTotal=0 and holidayDowSplit
+       [slotKey] is set to null (null DOW split triggers global fallback).
+================================================================ */
+function toggleDVG(hid,slotKey){
+  const toggleEl=document.getElementById('dvg_toggle_'+hid+'_'+slotKey);
+  const gridEl=document.getElementById('dvg_grid_'+hid+'_'+slotKey);
+  if(!toggleEl||!gridEl)return;
+  const isOpen=toggleEl.classList.contains('open');
+  if(isOpen){toggleEl.classList.remove('open');gridEl.classList.remove('open');}
+  else{toggleEl.classList.add('open');gridEl.classList.add('open');}
+}
+
+function onDVGInput(hid,slotKey,di,rawVal){
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  // Ensure dailyVolumes structure exists (graceful for restored holidays)
+  if(!h.dailyVolumes)h.dailyVolumes={};
+  if(!Array.isArray(h.dailyVolumes[slotKey]))h.dailyVolumes[slotKey]=[null,null,null,null,null,null,null];
+  // Ensure holidayDowSplit is a per-slot map (migration safety)
+  if(!h.holidayDowSplit||typeof h.holidayDowSplit!=='object'||Array.isArray(h.holidayDowSplit)){
+    const _hds={};YEAR_SLOTS.forEach(y=>{_hds[y.toLowerCase()]=null;});h.holidayDowSplit=_hds;
+  }
+  // Store raw value: null if blank, else non-negative numeric
+  const trimmed=String(rawVal).trim();
+  h.dailyVolumes[slotKey][di]=(trimmed===''||trimmed===null)?null:Math.max(0,+trimmed||0);
+
+  const arr=h.dailyVolumes[slotKey];
+  // allBlank: true only when every cell is null or empty string.
+  // A cell containing the number 0 is NOT blank — it is explicit zero data.
+  const allBlank=arr.every(v=>v===null||v==='');
+
+  // Update the read-only total cell
+  const totalEl=document.getElementById('dvg_total_'+hid+'_'+slotKey);
+  if(allBlank){
+    if(totalEl)totalEl.textContent='—';
+    // All inputs cleared: set this slot's holidayDowSplit to null (restore global fallback)
+    h.holidayDowSplit[slotKey]=null;
+    invalidateAllCaches();return;
+  }
+
+  // Compute week total (null treated as 0, explicit 0 is 0)
+  const weekTotal=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+  // Display: weekTotal=0 when all cells are 0 — show '0', not '—', so the user can
+  // see they entered 0s and can correct them. '—' is reserved for the truly blank case.
+  if(totalEl)totalEl.textContent=weekTotal===0?'0':weekTotal.toLocaleString();
+
+  // --- Derive holidayDowSplit for this slot ---
+  // Stored as h.holidayDowSplit[slotKey] — per-slot, independent of other slots.
+  // Only derive when weekTotal > 0; zero total (all-zero entries) sets to null so the
+  // HC calculation falls back to global dowSplit rather than dividing by zero.
+  if(weekTotal>0){
+    // Compute raw percentages for all 7 days
+    const rawPcts=arr.map(v=>(v!=null?+v:0)/weekTotal*100);
+    // Floating-point correction: recompute each element from the running remainder
+    // so accumulated drift is absorbed across all positions, not just the last.
+    // Method: iterate i=0..5, subtract each rounded value from the remaining 100;
+    // the last position receives whatever remains, guaranteeing sum=exactly 100
+    // for any integer or fractional input without relying on index-6-only adjustment.
+    let remaining=100;
+    for(let i=0;i<6;i++){
+      const rounded=parseFloat(rawPcts[i].toFixed(10));
+      rawPcts[i]=rounded;
+      remaining-=rounded;
+    }
+    rawPcts[6]=Math.max(0,parseFloat(remaining.toFixed(10)));
+    h.holidayDowSplit[slotKey]=rawPcts;
+  } else {
+    // weekTotal=0: all entries are 0 — no valid DOW split can be derived, fall back to global
+    h.holidayDowSplit[slotKey]=null;
+  }
+
+  invalidateAllCaches();
+}
+
+/* ================================================================
    HC DAILY DATA BUILDER
 ================================================================ */
 function buildDailyData(h,ch){
@@ -2123,7 +2326,35 @@ function buildDailyData(h,ch){
   const combos=h.combinations[ch]||generateCombinations(h,ch);
   const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
   if(!sel)return{days:[],hitCap:false};
-  const wkVol=sel.forecasted||0;const splits=h.dowSplit[ch];
+  const wkVol=sel.forecasted||0;
+  // holidayDowSplit fallback logic (per-slot):
+  // The selected combination determines which year slot's forecast is used.
+  // When a single year slot was selected (e.g. "Last Year 2025"), that slot's
+  // dailyVolumes-derived split is used. For multi-year average combinations,
+  // no single slot's split is unambiguously authoritative, so we derive the
+  // effective slot key from the first year in the combination.
+  // Fallback chain:
+  //   1. h.holidayDowSplit[effectiveSlotKey] — per-slot split from daily volume grid
+  //   2. h.dowSplit[ch] — per-channel global DOW split from Tab 5
+  // This applies identically across all four channel models: Erlang C (Voice),
+  // concurrency (Chat), throughput (Email), weighted blend (Blended).
+  // The underlying staffing formulas are NOT altered — only the input per-day
+  // volume percentages change.
+  let effectiveSlotKey=null;
+  if(sel.years&&sel.years.length===1){
+    effectiveSlotKey=sel.years[0].toLowerCase(); // e.g. 'Y1' → 'y1'
+  } else if(sel.years&&sel.years.length>1){
+    // Multi-year average: use the most-recent (lowest index) year's slot split.
+    // Y-slots are ordered Y1 (most recent) → Y5 (oldest), so the first in the array
+    // after sorting by YEAR_SLOTS index is the most recent.
+    const sorted=[...sel.years].sort((a,b)=>YEAR_SLOTS.indexOf(a)-YEAR_SLOTS.indexOf(b));
+    effectiveSlotKey=sorted[0].toLowerCase();
+  }
+  const perSlotSplit=effectiveSlotKey&&
+    h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?
+    h.holidayDowSplit[effectiveSlotKey]:null;
+  const useHolidaySplit=Array.isArray(perSlotSplit)&&perSlotSplit.length===7;
+  const splits=useHolidaySplit?perSlotSplit:h.dowSplit[ch];
   const splitSum=splits.reduce((a,b)=>a+b,0);
   const opStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
   const opEnd=h.operatingHoursOverride?h.operatingHours.end:APP.config.defaultEnd;
@@ -3452,6 +3683,41 @@ function loadFromJSON(d){
         nh.years[y].baseline=typeof yd.baselineVolume==='object'?yd.baselineVolume:(typeof yd.baseline==='object'?yd.baseline:{voice:yd.baselineVolume||0,chat:0,email:0,blended:0});
         if(yd.anomalyFlag&&yd.anomalySource==='manual')nh.manualAnomalyOverrides[y]=true;
       }});}
+      // Restore dailyVolumes — handle missing field (plans saved before this feature).
+      // Missing field → default null arrays (no entries). Partial arrays padded to 7 elements.
+      if(h.dailyVolumes&&typeof h.dailyVolumes==='object'){
+        YEAR_SLOTS.forEach(y=>{
+          const slotKey=y.toLowerCase();
+          const stored=h.dailyVolumes[slotKey];
+          if(Array.isArray(stored)){
+            // Pad to 7 elements if shorter; slice to 7 if longer (defensive)
+            const padded=stored.slice(0,7);
+            while(padded.length<7)padded.push(null);
+            nh.dailyVolumes[slotKey]=padded;
+          }
+          // else: leave as default null array from newHoliday()
+        });
+      }
+      // Restore holidayDowSplit — per-slot map {y1:null|[7-elem], y2:..., ...}.
+      // Handles three stored shapes:
+      //   (a) per-slot map (current v2.0 format) — validate each slot entry
+      //   (b) legacy flat array (old single-split shape) — discard (no slot mapping)
+      //   (c) null/missing — leave as default null-per-slot map from newHoliday()
+      if(h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)){
+        // Per-slot map — validate each slot
+        YEAR_SLOTS.forEach(y=>{
+          const sk=y.toLowerCase();
+          const entry=h.holidayDowSplit[sk];
+          if(Array.isArray(entry)&&entry.length===7){
+            const ss=entry.reduce((a,b)=>a+(+b||0),0);
+            if(ss>0.1)nh.holidayDowSplit[sk]=entry;
+            // else sum ~0 — leave as null (already null from newHoliday)
+          }
+          // else null or wrong shape — leave as null
+        });
+      }
+      // Legacy flat array or null: nh.holidayDowSplit already initialised as per-slot
+      // null map by newHoliday() — no action needed.
       return nh;
     });
   }
