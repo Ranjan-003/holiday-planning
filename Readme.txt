@@ -69,9 +69,12 @@ HOW TO USE (PYTHON BACKEND MODE)
   Run the server:
     python data_engine.py
 
-  The app will auto-detect the backend at http://localhost:5050 and use it for
-  Erlang C and shift optimisation. If the backend is offline the app falls back
-  to browser-side JS automatically (status shown in the header).
+  NOTE (v2.0.x): The backend connection is an INDICATOR ONLY in this version.
+  The status dot in the header shows green when the backend is reachable, but
+  all HC computation (Erlang C voice, chat concurrency, email throughput) runs
+  browser-side regardless. The backend API endpoints are available for direct
+  external use (scripts, CI validation). See the BACKEND MODE NOTE section
+  below for full details. Backend routing will be activated in a future version.
 
 IMPORTING AND EXPORTING DATA
 -----------------------------
@@ -184,7 +187,9 @@ KNOWN LIMITATIONS
     channel in those pickers. For blended holidays, select Voice and Chat
     separately and weight each channel's volume by the blended split % configured
     on the Setup tab. Alternatively, use the Python backend /api/full_day_hc with
-    channel="blended", or review blended_hc in the exported JSON plan.
+    channel="blended". Note: the Export JSON plan (exportFinalPlan) does not
+    include a blended_hc field — it contains peakNetHC, peakGrossHC, and
+    weeklyForecast per channel (voice/chat/email individually, not blended).
   - Simultaneous use: IndexedDB plan storage uses a composite key (queue|region).
     Two browser tabs open on the same machine for the same queue and region share
     this key. Clicking "Save plan" in the second tab silently overwrites the first
