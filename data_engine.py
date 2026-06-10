@@ -84,7 +84,13 @@ def service_level_at_agents(
     ec = erlang_c(agents, intensity)
     if agents <= intensity:
         return 0.0
-    mu = 3600 / aht_seconds  # service rate per agent per second
+    # mu = 3600/aht is the service rate expressed in calls-per-hour (not per-second).
+    # Dividing by 3600 in the exponent converts back to the dimensionless form:
+    #   exponent = -(N - A) * (3600/aht) * sl_sec / 3600 = -(N - A) * sl_sec / aht
+    # This is algebraically identical to the JS formula -(agents-intensity)*(3600/aht)*slSec/3600.
+    # The variable is named mu by convention but carries per-hour units — not per-second.
+    # Downstream code that reuses this variable must treat it as calls/hour, not calls/second.
+    mu = 3600 / aht_seconds  # service rate per agent per HOUR (calls/hour) — see note above
     exponent = -(agents - intensity) * mu * sl_target_seconds / 3600
     sl = 1.0 - ec * math.exp(exponent)
     return max(0.0, min(1.0, sl))
@@ -317,11 +323,14 @@ def score_combination(
     # Previous value was /3.0 (3-year cap); updated to /5.0 to match the 5-year history model.
     richness_score = min(len(clean) / 5.0, 1.0)
 
-    # Recency: newer years score higher.
+    # Recency: average per-year weight across all years in the combination.
     # AUTHORITY: JS scoreCombo() in index.htm is the canonical implementation.
     # These weights are aligned to match exactly: Y1 (most recent) = 1.0 → Y5 = 0.1.
     # Previous weights (Y1:0.2, Y2:0.5, Y3:1.0) were inverted and have been corrected.
     # Y4 and Y5 added to support full 5-year history (JS handles Y1-Y5; backend aligned).
+    # Recency design: mean recency of the combination — a Y1+Y5 combo scores 0.55,
+    # higher than Y3-alone (0.5), reflecting that including Y1 lifts the combination's
+    # recency even when paired with an older year. This is intentional: see JS comment.
     year_weights = {"Y1": 1.0, "Y2": 0.7, "Y3": 0.5, "Y4": 0.3, "Y5": 0.1}
     recency_total = 0
     recency_count = 0

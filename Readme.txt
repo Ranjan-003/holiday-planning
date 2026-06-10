@@ -270,7 +270,40 @@ VERSION HISTORY
         CSS holiday-year-grid updated to 5-column auto-fit layout,
         Readme updated to reflect 5-year capability and v2.0 scoring weights
 
+  v2.0.1 (Critic cycle 2 fixes):
+        exportFinalPlan() version tag corrected from '1.2' to '2.0' — downstream
+          automation and import tools will now correctly identify these exports as
+          v2.0 plans containing Y4/Y5 data slots,
+        SVG logo fallback fill attribute added for JS-disabled browsers,
+        aggregate import confirm dialog now explicitly warns that only Voice actual
+          is written — Chat and Email actuals must be set manually on Setup tab,
+        hcSelectedChannels reset on plan restore to first holiday's active channels
+          — prevents stale channel selection from a prior plan carrying into the new one,
+        Tab 6 zero-volume inline warning added — user sees explicit message when HC
+          is zero due to zero plan volume rather than a silent all-zeros table,
+        Email daily summary column headers changed to 'Daily Net HC (flat)' and
+          'Daily Gross HC (flat)' to clarify that email HC is a constant daily figure,
+        Tab 3 renderCombinations debounce (60ms) added in switchTab to prevent
+          redundant re-renders on rapid tab-bouncing,
+        APP.backendOnline documented as indicator-only in pingBackend comment and
+          status label — no HC computation routes to backend in current version,
+        Erlang C mu label in data_engine.py corrected from 'per second' to 'per HOUR'
+          — cosmetic fix; numeric result unchanged,
+        scoreCombo recency averaging design intent documented inline,
+        detectAnomalies n=2 behaviour documented — detection inactive at 2 data points
+
+  BACKEND MODE NOTE
+  -----------------
+  In v2.0.x the Python backend status dot is an INDICATOR ONLY. All HC
+  computation (Erlang C voice, chat concurrency, email throughput) runs
+  browser-side regardless of whether the backend is reachable. The backend
+  API endpoints (/api/erlang_c, /api/chat_hc, /api/email_hc) remain available
+  for direct external use (scripts, CI validation). The browser-side Erlang C
+  is numerically equivalent to the Python implementation (same sl_sec/aht
+  exponent). Backend routing will be activated in a future version when the
+  backend adds capabilities beyond browser parity (e.g. ILP shift optimisation).
+
 ================================================================================
   Built to WFM enterprise standards. Planner → Generator → Critic reviewed.
-  Amber critique cycle addressed. Score target: Green.
+  Critic cycle 2 Amber items resolved. Score target: Green.
 ================================================================================
