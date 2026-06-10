@@ -1,6 +1,6 @@
 """
 Holiday Planning Template — Python Backend
-WFM Scheduling Tool | Version 1.0
+WFM Scheduling Tool | Version 2.0
 
 Provides:
   - Erlang C staffing calculation (voice)
@@ -313,28 +313,50 @@ def score_combination(
     cv = (std / abs(mean)) if mean != 0 else 1.0
     consistency_score = max(0, 1 - min(cv, 1.0))
 
-    # Data richness
-    richness_score = min(len(clean) / 3.0, 1.0)
+    # Data richness: normalised to 5-year maximum (aligned to JS which uses impacts.length/5).
+    # Previous value was /3.0 (3-year cap); updated to /5.0 to match the 5-year history model.
+    richness_score = min(len(clean) / 5.0, 1.0)
 
-    # Recency: newer years score higher
-    year_weights = {"Y1": 0.2, "Y2": 0.5, "Y3": 1.0}
+    # Recency: newer years score higher.
+    # AUTHORITY: JS scoreCombo() in index.htm is the canonical implementation.
+    # These weights are aligned to match exactly: Y1 (most recent) = 1.0 → Y5 = 0.1.
+    # Previous weights (Y1:0.2, Y2:0.5, Y3:1.0) were inverted and have been corrected.
+    # Y4 and Y5 added to support full 5-year history (JS handles Y1-Y5; backend aligned).
+    year_weights = {"Y1": 1.0, "Y2": 0.7, "Y3": 0.5, "Y4": 0.3, "Y5": 0.1}
     recency_total = 0
     recency_count = 0
     for y in years_available:
         if y not in anomaly_years:
-            recency_total += year_weights.get(y, 0.5)
+            recency_total += year_weights.get(y, 0.1)
             recency_count += 1
     recency_score = (recency_total / recency_count) if recency_count else 0
 
-    # Anomaly penalty
-    anomaly_penalty = 0.3 * len([y for y in years_available if y in anomaly_years])
+    # Anomaly penalty: capped so anomalous data always scores above no data (floor=1).
+    # Without the cap, 3 anomalous years produce penalty=0.9 against positive_sum<=1.0,
+    # making raw potentially negative and the score 0 — same as an empty combination.
+    # Guard: when positive_component is very small (e.g. Y5-only single year: ~0.03),
+    # the cap ceiling (positive_component - 0.01) could be negative, making anomaly_penalty
+    # negative and inflating the score. Fix: cap = max(0, positive_component - 0.01)
+    # ensures the ceiling is never negative. If positive_component <= 0.01, no penalty
+    # is applied and the score equals the tiny positive_component — ranked last.
+    positive_component = 0.40 * consistency_score + 0.30 * richness_score + 0.30 * recency_score
+    raw_penalty = 0.3 * len([y for y in years_available if y in anomaly_years])
+    penalty_cap = max(0.0, positive_component - 0.01)
+    anomaly_penalty = min(raw_penalty, penalty_cap)
 
-    raw = (0.40 * consistency_score +
-           0.30 * richness_score +
-           0.30 * recency_score -
-           anomaly_penalty)
+    raw = positive_component - anomaly_penalty
 
     return round(max(0, min(100, raw * 100)), 1)
+
+
+def get_all_subsets(items: list) -> list:
+    """Return all non-empty subsets of items (mirrors JS getAllSubsets)."""
+    result = []
+    n = len(items)
+    for mask in range(1, 1 << n):
+        subset = [items[i] for i in range(n) if mask & (1 << i)]
+        result.append(subset)
+    return result
 
 
 def generate_combinations(
@@ -343,9 +365,62 @@ def generate_combinations(
     plan_volume: float
 ) -> list:
     """
-    Generate all valid combinations from Y1/Y2/Y3 data.
-    historical: {"Y1": {"actual": x, "baseline": y}, "Y2": ..., "Y3": ...}
+    Generate all valid combinations from up to 5 year slots (Y1–Y5).
+    historical: {"Y1": {"actual": x, "baseline": y}, ..., "Y5": ...}
     Returns sorted list of combination dicts.
+    Aligned with JS generateCombinations() which uses getAllSubsets() over YEAR_SLOTS.
+    """
+    # Support full 5-year history — mirrors JS YEAR_SLOTS=['Y1','Y2','Y3','Y4','Y5']
+    available_years = [y for y in ["Y1", "Y2", "Y3", "Y4", "Y5"] if y in historical]
+    if not available_years:
+        return []
+
+    combos = []
+
+    for subset in get_all_subsets(available_years):
+        impacts = []
+        for y in subset:
+            d = historical[y]
+            imp = compute_impact_pct(d["actual"], d["baseline"])
+            if imp is not None:
+                impacts.append(imp)
+        if not impacts:
+            continue
+        avg = round(float(np.mean(impacts)), 2)
+        forecasted = round(plan_volume * (1 + avg / 100), 0)
+        any_anomaly = any(y in anomaly_years for y in subset)
+        score = score_combination(
+            f"Avg({'+'.join(subset)})" if len(subset) > 1 else subset[0],
+            impacts, subset, anomaly_years
+        )
+        combo_name = subset[0] if len(subset) == 1 else f"Avg({'+'.join(subset)})"
+        combos.append({
+            "combo": combo_name,
+            "years": subset,
+            "impacts": impacts,
+            "blended_impact_pct": avg,
+            "forecasted_volume": forecasted,
+            "score": score,
+            "contains_anomaly": any_anomaly,
+            "recommended": False
+        })
+
+    # Sort and flag recommendation
+    combos.sort(key=lambda x: x["score"], reverse=True)
+    if combos:
+        combos[0]["recommended"] = True
+
+    return combos
+
+
+def _generate_combinations_legacy(
+    historical: dict,
+    anomaly_years: list,
+    plan_volume: float
+) -> list:
+    """
+    LEGACY: Original Y1/Y2/Y3-only generator. Retained for reference only.
+    Use generate_combinations() which supports Y1-Y5.
     """
     available_years = [y for y in ["Y1", "Y2", "Y3"] if y in historical]
     if not available_years:
@@ -535,7 +610,7 @@ def optimise_shifts(
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "WFM Holiday Planning Engine", "version": "1.0"})
+    return jsonify({"status": "ok", "service": "WFM Holiday Planning Engine", "version": "2.0"})
 
 
 @app.route("/api/shrinkage", methods=["POST"])
@@ -624,8 +699,16 @@ def api_email_hc():
       "operating_start": "08:00",
       "operating_end": "20:00",
       "occupancy_target_pct": 75,
-      "total_shrinkage_pct": 15
+      "total_shrinkage_pct": 15      // applied at API layer to produce gross_hc
     }
+
+    NOTE (Critic item 6 — email shrinkage): shrinkage is applied here at the API
+    layer (result["gross_hc"] = ceil(gross_hc(net, shrink))). The internal
+    email_agents_required() function returns net=gross (no shrinkage uplift), which
+    is correct — it computes net staffing from throughput. The API wrapper then
+    applies the caller-supplied total_shrinkage_pct to produce gross_hc.
+    If total_shrinkage_pct is omitted or 0, gross_hc will equal net_hc.
+    API consumers must supply total_shrinkage_pct to receive a gross figure.
     """
     data = request.get_json()
     result = email_agents_required(

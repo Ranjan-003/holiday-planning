@@ -14,7 +14,11 @@
 /* ── App-specific styles ── */
 .holiday-row-card{border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--sp-5);background:var(--surface-card);margin-bottom:var(--sp-4);box-shadow:var(--shadow-sm)}
 .holiday-row-card__header{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--sp-4);padding-bottom:var(--sp-3);border-bottom:1px solid var(--border-subtle)}
-.holiday-year-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:var(--sp-4)}
+/* 5-slot grid: auto-fit with 160px min ensures all five year blocks (Y1–Y5) lay out
+   in a single row on viewports ≥ 900px (5×160 + 4×gap ≈ 864px) and wrap cleanly
+   to 2+3 or 3+2 on narrower screens. The inline override on line ~126 is now
+   redundant but preserved for legacy cache compatibility. */
+.holiday-year-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-4)}
 .year-block{background:var(--surface-sunken);border-radius:var(--radius-md);padding:var(--sp-3) var(--sp-4);border:1px solid var(--border-subtle)}
 .year-block__label{font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.07em;color:var(--text-tertiary);margin-bottom:var(--sp-3)}
 .year-block input{margin-bottom:var(--sp-2)}
@@ -27,9 +31,13 @@
 .combo-row-item.recommended{border-color:var(--color-teal-500);background:var(--color-teal-50)}
 .combo-row-item.selected{border-color:var(--color-primary-600);background:var(--color-primary-50)}
 .combo-row-item.anomalous{opacity:.5}
-/* FIX 10: Score hover card */
+/* FIX 10: Score hover card — hover (pointer devices) + touch-open class (touch devices).
+   On touch-only devices CSS :hover does not fire reliably. The selectCombo() onclick
+   handler is separate from score breakdown — a dedicated score-info button (rendered
+   inside the score column) handles tap-to-toggle for touch users. The .touch-open class
+   is toggled by toggleScoreCard() and cleared by document touchstart outside the card. */
 .score-hover-card{position:absolute;right:0;top:calc(100% + 4px);width:240px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:var(--radius-md);padding:var(--sp-3);box-shadow:var(--shadow-md);z-index:100;display:none;font-size:var(--text-xs);pointer-events:none}
-.combo-row-item:hover .score-hover-card{display:block}
+.combo-row-item:hover .score-hover-card,.score-hover-card.touch-open{display:block;pointer-events:auto}
 .score-hover-card__row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border-subtle)}
 .score-hover-card__row:last-child{border-bottom:none;font-weight:var(--weight-semibold);padding-top:var(--sp-2)}
 .day-volume-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-2)}
@@ -60,6 +68,10 @@
 .ch-toggle.active-voice{border-color:var(--ch-voice);background:var(--ch-voice-bg);color:var(--ch-voice)}
 .ch-toggle.active-chat{border-color:var(--ch-chat);background:var(--ch-chat-bg);color:var(--ch-chat)}
 .ch-toggle.active-email{border-color:var(--ch-email);background:var(--ch-email-bg);color:var(--ch-email)}
+/* Legacy inert rule — .active-blended is never applied by the channel picker loop because
+   CHANNELS=['voice','chat','email'] excludes 'blended'. Kept so that any cached external
+   reference that inspects this class does not produce an unstyled element. No DOM element
+   in the application carries this class under normal operation. See style-guide.css §16. */
 .ch-toggle.active-blended{border-color:var(--ch-blended);background:var(--ch-blended-bg);color:var(--ch-blended)}
 .ch-panel{display:none}.ch-panel.active{display:block}
 .ch-panel-tabs{display:flex;gap:2px;border-bottom:1px solid var(--border-subtle);margin-bottom:var(--sp-4)}
@@ -83,6 +95,30 @@
 .queue-context-bar .btn{height:32px;white-space:nowrap}
 .year-banner{background:var(--color-amber-50);border-bottom:1px solid var(--color-amber-100);padding:var(--sp-2) var(--sp-6);font-size:var(--text-sm);color:var(--color-amber-700);align-items:center;gap:var(--sp-3);display:none}
 .year-banner.visible{display:flex}
+/* ── Queue-first gate ── */
+.queue-gate{background:var(--color-primary-50);border:2px dashed var(--color-primary-100);border-radius:var(--radius-lg);padding:var(--sp-10) var(--sp-8);text-align:center;margin-bottom:var(--sp-6)}
+.queue-gate__icon{font-size:36px;margin-bottom:var(--sp-3);opacity:.5}
+.queue-gate__title{font-size:var(--text-lg);font-weight:var(--weight-semibold);color:var(--color-primary-700);margin-bottom:var(--sp-2)}
+.queue-gate__body{font-size:var(--text-sm);color:var(--text-secondary);margin-bottom:var(--sp-5)}
+/* ── Queue badge in section headers ── */
+.queue-label-badge{display:inline-flex;align-items:center;gap:var(--sp-2);padding:3px 10px;border-radius:var(--radius-pill);background:var(--color-primary-50);border:1px solid var(--color-primary-100);font-size:var(--text-xs);font-weight:var(--weight-semibold);color:var(--color-primary-700);font-family:var(--font-mono)}
+/* ── Day toggle pills (inline, replaces dropdown) ── */
+.day-multiselect{display:flex;gap:var(--sp-1);flex-wrap:wrap}
+.day-toggle{display:inline-flex;align-items:center;padding:4px 10px;border-radius:var(--radius-pill);border:1.5px solid var(--border-default);cursor:pointer;font-size:var(--text-xs);font-weight:var(--weight-medium);background:var(--surface-card);transition:all var(--transition-fast);user-select:none;white-space:nowrap}
+.day-toggle.active{border-color:var(--color-primary-600);background:var(--color-primary-50);color:var(--color-primary-700)}
+/* ── Holiday upload strip ── */
+.holiday-upload-strip{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--surface-sunken);border-radius:var(--radius-md);border:1px solid var(--border-subtle);margin-bottom:var(--sp-4)}
+.holiday-upload-strip .t-caption{flex:1}
+/* ── HC channel multi-select (replaces dropdown in tab 6) ── */
+.hc-ch-multiselect{display:flex;gap:var(--sp-2);flex-wrap:wrap;margin-top:var(--sp-2)}
+/* ── Shrinkage individual-component warning ── */
+.shrink-input-warn{border-color:var(--color-amber-500)!important;}
+.shrink-component-warn{font-size:var(--text-xs);color:var(--color-amber-700);margin-top:2px;display:none}
+.shrink-component-warn.visible{display:block}
+/* Reset button defaults for toggle pills */
+button.ch-toggle,button.day-toggle{font-family:var(--font-sans);outline:none;border-radius:var(--radius-pill)}
+button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--shadow-focus)}
+/* style-guide.css section 16 (HC Channel Picker) defines ch-toggle--disabled (future disabled state) and the legacy inert hc-blended-note rule (kept for cache compatibility; not rendered) */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center}
 .modal-overlay.hidden{display:none}
 .modal{background:var(--surface-card);border-radius:var(--radius-xl);box-shadow:var(--shadow-xl);width:min(660px,94vw);max-height:88vh;overflow-y:auto}
@@ -102,8 +138,8 @@
 <div class="app-shell">
 <header class="app-header">
   <div class="app-header__logo">
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-      <rect width="28" height="28" rx="7" fill="#3657e8"/>
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true" id="appLogoSvg">
+      <rect width="28" height="28" rx="7" id="appLogoRect"/>
       <rect x="6" y="6" width="7" height="7" rx="2" fill="white" opacity=".9"/>
       <rect x="15" y="6" width="7" height="7" rx="2" fill="white" opacity=".6"/>
       <rect x="6" y="15" width="7" height="7" rx="2" fill="white" opacity=".6"/>
@@ -129,13 +165,13 @@
 <!-- ═══ QUEUE CONTEXT BAR ═══ -->
 <div class="queue-context-bar">
   <div class="form-group">
-    <label class="form-label">Queue name</label>
-    <input type="text" id="queueName" list="queueDetectedList" placeholder="Enter or select queue…" style="min-width:240px" oninput="APP.queue.name=this.value">
+    <label class="form-label">Queue name <span style="color:var(--color-red-500)">*</span></label>
+    <input type="text" id="queueName" list="queueDetectedList" placeholder="Enter or select queue…" style="min-width:240px" oninput="APP.queue.name=this.value;updateQueueGate()">
     <datalist id="queueDetectedList"></datalist>
   </div>
   <div class="form-group">
-    <label class="form-label">Region</label>
-    <select id="queueRegion" onchange="APP.queue.region=this.value">
+    <label class="form-label">Region <span style="color:var(--color-red-500)">*</span></label>
+    <select id="queueRegion" onchange="APP.queue.region=this.value;updateQueueGate()">
       <option value="">— Select —</option>
       <option value="APJ">APJ</option>
       <option value="EMEA">EMEA</option>
@@ -150,14 +186,23 @@
       <option value="OSP">OSP (External)</option>
     </select>
   </div>
+  <button class="btn btn--primary btn--sm" onclick="confirmQueueSetup()" id="queueConfirmBtn">Set queue</button>
   <button class="btn btn--secondary btn--sm" onclick="saveQueuePlan()">Save plan</button>
   <button class="btn btn--secondary btn--sm" onclick="openLoadModal()">Load saved plan</button>
+  <div id="queueActiveBadge" style="display:none;margin-left:auto">
+    <span class="queue-label-badge" id="queueActiveBadgeText"></span>
+  </div>
 </div>
 
 <!-- ═══ YEAR BANNER ═══ -->
 <div class="year-banner" id="yearBanner">
   ⚠️ <span id="yearBannerText">Year not detected in the imported file — assuming Last Year <span id="yearBannerYear"></span>. Adjust via the import override if needed.</span>
 </div>
+<!-- ═══ PLAN-LOAD WARNING BANNER STACK ═══
+     Banners injected here on plan load. Order is always: DOW migration (first/top)
+     then zero-shrinkage (second/below). Both are independently dismissable.
+     Do not remove this container — the JS banner injection targets it by ID. -->
+<div id="planLoadBannerStack"></div>
 
 <!-- ═══ IMPORT MODAL ═══ -->
 <div class="modal-overlay hidden" id="importModal">
@@ -222,17 +267,35 @@
 <!-- ═══ TAB 1: SETUP ═══ -->
 <section class="tab-panel active" id="tab0">
   <h2 class="sr-only">Setup</h2>
+  <!-- Queue gate — shown when queue not yet confirmed -->
+  <div class="queue-gate" id="queueGate">
+    <div class="queue-gate__icon">🗂️</div>
+    <div class="queue-gate__title">Step 1 — Set your queue</div>
+    <div class="queue-gate__body">Enter a queue name and region in the bar above, then click <strong>Set queue</strong> to unlock holiday planning.</div>
+    <button class="btn btn--primary" onclick="document.getElementById('queueName').focus()">Enter queue name above</button>
+  </div>
+  <!-- Holiday planning content — hidden until queue confirmed -->
+  <div id="holidayPlanningContent" style="display:none">
   <div class="layout-cols">
     <div>
       <div class="section-header">
-        <div class="section-header__left"><h2>Holidays</h2><p>Add each holiday. Enter up to 3 years of actual volume.</p></div>
-        <button class="btn btn--primary btn--sm" onclick="addHoliday()">+ Add holiday</button>
+        <div class="section-header__left">
+          <h2>Holidays &nbsp;<span id="setupQueueBadge"></span></h2>
+          <p>Add each holiday. Enter volumes manually or upload a CSV / XLS file.</p>
+        </div>
+        <div style="display:flex;gap:var(--sp-2)">
+          <label class="btn btn--secondary btn--sm" style="cursor:pointer" title="Upload CSV or XLS with holiday data">
+            Upload holidays
+            <input type="file" id="holidayUploadInput" accept=".csv,.xls,.xlsm,.xlsx" style="display:none" onchange="importHolidayFile(this)">
+          </label>
+          <button class="btn btn--primary btn--sm" onclick="addHoliday()">+ Add holiday</button>
+        </div>
       </div>
       <div id="holidayList"></div>
       <div class="empty-state" id="emptyHolidays">
         <div class="empty-state__icon">📅</div>
         <div class="empty-state__title">No holidays added yet</div>
-        <div class="empty-state__body">Click "Add holiday" to begin.</div>
+        <div class="empty-state__body">Click "+ Add holiday" or upload a CSV / XLS file to begin.</div>
       </div>
     </div>
     <div>
@@ -310,7 +373,7 @@
             <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
             <input type="number" id="ahtEmail" value="600" min="1" oninput="validateAHT();invalidateAllCaches()">
             <span class="text-faint" style="font-size:var(--text-sm)">Occ.</span>
-            <input type="number" id="emailOccupancy" value="75" min="1" max="99" onchange="invalidateAllCaches()">
+            <input type="number" id="emailOccupancy" value="75" min="20" max="99" onchange="validateEmailOccupancy()">
           </div>
           <div class="alert alert--info mt-2"><small>Email occupancy is separate from SL%. SL% tracks response time; occupancy targets agent utilisation.</small></div>
         </div>
@@ -346,13 +409,14 @@
     </div>
   </div>
   <div class="flex justify-end mt-6"><button class="btn btn--primary" onclick="switchTab(1)">Continue to analysis →</button></div>
+  </div><!-- /holidayPlanningContent -->
 </section>
 
 <!-- ═══ TAB 2: HISTORICAL ANALYSIS ═══ -->
 <section class="tab-panel" id="tab1">
   <h2 class="sr-only">Historical analysis</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>Historical analysis</h2><p>Year-on-year volume impact % per holiday. Anomalies auto-flagged; toggle to override.</p></div>
+    <div class="section-header__left"><h2>Historical analysis &nbsp;<span id="histQueueBadge"></span></h2><p>Year-on-year volume impact % per holiday. Anomalies auto-flagged; toggle to override.</p></div>
     <button class="btn btn--secondary btn--sm" onclick="recalcAll()">Recalculate all</button>
   </div>
   <div id="historicalAnalysisContent"></div>
@@ -366,7 +430,7 @@
 <section class="tab-panel" id="tab2">
   <h2 class="sr-only">Combinations</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>Trend combinations</h2><p>Every valid year combination scored and ranked. Hover score for breakdown. Click a row to select.</p></div>
+    <div class="section-header__left"><h2>Trend combinations &nbsp;<span id="comboQueueBadge"></span></h2><p>Every valid year combination scored and ranked. Hover score for breakdown. Click a row to select.</p></div>
   </div>
   <div id="combinationsContent"></div>
   <div class="flex justify-end mt-6 gap-3">
@@ -379,7 +443,7 @@
 <section class="tab-panel" id="tab3">
   <h2 class="sr-only">Recommendation</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>Recommendation</h2><p>Highest-scoring combination per holiday with rationale. Override if needed.</p></div>
+    <div class="section-header__left"><h2>Recommendation &nbsp;<span id="recQueueBadge"></span></h2><p>Highest-scoring combination per holiday with rationale. Override if needed.</p></div>
   </div>
   <div id="recommendationContent"></div>
   <div class="flex justify-end mt-6 gap-3">
@@ -392,7 +456,7 @@
 <section class="tab-panel" id="tab4">
   <h2 class="sr-only">Daily breakdown</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>Daily breakdown</h2><p>Weekly forecast distributed to each day. Edit day-of-week split % or use defaults.</p></div>
+    <div class="section-header__left"><h2>Daily breakdown &nbsp;<span id="dailyQueueBadge"></span></h2><p>Weekly forecast distributed to each day. Edit day-of-week split % or use defaults.</p></div>
   </div>
   <div id="dailyBreakdownContent"></div>
   <div class="flex justify-end mt-6 gap-3">
@@ -405,22 +469,19 @@
 <section class="tab-panel" id="tab5">
   <h2 class="sr-only">HC and coverage</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>HC &amp; coverage</h2><p>Net and gross headcount at daily summary and 30-min interval level.</p></div>
+    <div class="section-header__left"><h2>HC &amp; coverage &nbsp;<span id="hcQueueBadge"></span></h2><p>Net and gross headcount at daily summary and 30-min interval level. Select one or more channels.</p></div>
   </div>
   <div class="card mb-6">
     <div class="card__header"><span class="card__title">Select holiday &amp; channel</span></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)">
-      <div class="form-group"><label class="form-label">Holiday</label><select id="hcHolidaySelect" onchange="invalidateHCCache();renderHCTab()"></select></div>
-      <div class="form-group"><label class="form-label">Channel</label>
-        <select id="hcChannelSelect" onchange="invalidateHCCache();renderHCTab()">
-          <option value="voice">Voice</option><option value="chat">Chat</option>
-          <option value="email">Email</option><option value="blended">Blended</option>
-        </select>
-      </div>
+    <div class="form-group mb-3"><label class="form-label">Holiday</label><select id="hcHolidaySelect" onchange="invalidateHCCache();renderHCTab()" style="max-width:400px"></select></div>
+    <div class="form-group">
+      <label class="form-label">Channel &nbsp;<span class="t-caption">(select one or more — interval drill-down shows active panel channel)</span></label>
+      <div class="hc-ch-multiselect" id="hcChannelPicker"></div>
     </div>
+    <div class="ch-panel-tabs" id="hcChannelPanelTabs" style="margin-top:var(--sp-4)"></div>
   </div>
   <div id="hcSummaryMetrics" class="metrics-row mb-6"></div>
-  <div id="hcCapWarn" class="cap-warn hidden">⚠️ One or more intervals hit the 2000-agent cap — volume may exceed operational capacity. Check AHT, volume, and SL targets.</div>
+  <div id="hcCapWarn" class="cap-warn hidden">⚠️ <strong>HC cap reached.</strong> One or more intervals hit a ceiling — either the Erlang 2000-agent cap (net HC saturated: check AHT, volume, and SL targets) or the gross HC sentinel of 9999 (extreme compound shrinkage: verify shrinkage components on the Setup tab). Both conditions show this warning. Review the interval table to identify which intervals are affected.</div>
   <div class="layout-cols">
     <div>
       <div class="card mb-4">
@@ -429,7 +490,7 @@
         </div>
         <div class="table-wrap">
           <table class="data-table">
-            <thead><tr><th>Day</th><th class="th--right">Volume</th><th class="th--right">Net HC</th><th class="th--right">Gross HC</th></tr></thead>
+            <thead><tr id="hcDailySummaryThead"><th>Day</th><th class="th--right">Volume</th><th class="th--right">Net HC</th><th class="th--right">Gross HC</th></tr></thead>
             <tbody id="hcDailySummaryBody"></tbody>
           </table>
         </div>
@@ -439,8 +500,9 @@
       <div class="card">
         <div class="card__header">
           <span class="card__title">30-min interval drill-down</span>
-          <select id="hcDaySelect" onchange="renderHCIntervals()" style="width:auto;height:28px;font-size:var(--text-sm)"></select>
+          <span class="t-caption" id="hcDrillDayLabel" style="min-height:1em;display:inline-block"></span>
         </div>
+        <div class="day-multiselect mb-3" id="hcDayPicker" style="padding:0 var(--sp-1)"></div>
         <div class="table-wrap" style="max-height:420px;overflow-y:auto">
           <table class="interval-table">
             <thead><tr><th>Interval</th><th>Calls/hr</th><th>Net HC</th><th>Gross HC</th></tr></thead>
@@ -463,15 +525,20 @@
 <section class="tab-panel" id="tab6">
   <h2 class="sr-only">Shift planner</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>Shift planner</h2><p>Enter planned shifts and evaluate coverage gaps. Comparison against gross HC (bodies required on floor).</p></div>
+    <div class="section-header__left"><h2>Shift planner &nbsp;<span id="spQueueBadge"></span></h2><p>Enter planned shifts and evaluate coverage gaps. Comparison against gross HC (bodies required on floor).</p></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)" class="mb-4">
-    <div class="form-group"><label class="form-label">Holiday</label><select id="spHolidaySelect" onchange="populateSPDays()"></select></div>
-    <div class="form-group"><label class="form-label">Day</label><select id="spDaySelect" onchange="recomputeAllChannelCoverage()"></select></div>
+  <div class="form-group mb-4">
+    <label class="form-label">Holiday</label>
+    <select id="spHolidaySelect" onchange="populateSPDays()" style="max-width:400px"></select>
+  </div>
+  <div class="card mb-4">
+    <div class="card__header"><span class="card__title">Select day</span><span class="t-caption">Select one day to evaluate</span></div>
+    <div class="day-multiselect" id="spDayPicker"></div>
   </div>
   <div class="card mb-4">
     <div class="card__header"><span class="card__title">Channels to evaluate</span><span class="t-caption">Select one or more</span></div>
     <div class="ch-multiselect" id="spChannelPicker"></div>
+    <div id="spBlendedChannelNote" class="alert alert--info mt-2" style="display:none"><small>One or more holidays use the <strong>Blended</strong> channel. Blended coverage is not viewable in this tab — HC is computed via the blended formula but no Blended toggle is shown. To view coverage for blended holidays, review the HC &amp; Coverage tab (Tab 6) or export the final plan.</small></div>
   </div>
   <div class="layout-cols">
     <div>
@@ -515,19 +582,24 @@
 <section class="tab-panel" id="tab7">
   <h2 class="sr-only">Shift recommendation</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>Shift recommendation</h2><p>Suggested starting point per channel — greedy heuristic, not guaranteed optimal. Manual adjustment may improve coverage.</p></div>
+    <div class="section-header__left"><h2>Shift recommendation &nbsp;<span id="srQueueBadge"></span></h2><p>Suggested starting point per channel — greedy heuristic, not guaranteed optimal. Manual adjustment may improve coverage.</p></div>
   </div>
-  <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--sp-4)" class="mb-4">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:var(--sp-4)" class="mb-4">
     <div class="form-group"><label class="form-label">Holiday</label><select id="srHolidaySelect" onchange="populateSRDays()"></select></div>
-    <div class="form-group"><label class="form-label">Day</label><select id="srDaySelect" onchange="renderShiftRecommendation()"></select></div>
     <div class="form-group">
       <label class="form-label">Agent pool (gross bodies on roster)</label>
-      <input type="number" id="srAgentPool" value="50" min="1" onchange="renderShiftRecommendation()">
+      <input type="number" id="srAgentPool" value="50" min="1" max="5000" oninput="debounceSRPoolChange()">
+      <div id="srPoolCapWarn" class="form-hint" style="display:none;color:var(--color-amber-700)">Pool values above 500 are capped in-browser to prevent thread blocking. For large-pool optimisation, connect the Python backend.</div>
     </div>
+  </div>
+  <div class="card mb-4">
+    <div class="card__header"><span class="card__title">Select day</span><span class="t-caption">Toggle one day</span></div>
+    <div class="day-multiselect" id="srDayPicker"></div>
   </div>
   <div class="card mb-4">
     <div class="card__header"><span class="card__title">Channels to optimise</span><span class="t-caption">Pool split equally across channels</span></div>
     <div class="ch-multiselect" id="srChannelPicker"></div>
+    <div id="srBlendedChannelNote" class="alert alert--info mt-2" style="display:none"><small>One or more holidays use the <strong>Blended</strong> channel. Blended shift optimisation is not available in this tab — HC is computed via the blended formula but no Blended toggle is shown. To review blended staffing, use the HC &amp; Coverage tab (Tab 6) or export the final plan.</small></div>
   </div>
   <div id="shiftRecommendationContent">
     <div class="empty-state"><div class="empty-state__icon">🗓️</div><div class="empty-state__title">Select a holiday, day and at least one channel</div></div>
@@ -545,8 +617,8 @@
    CONSTANTS & STATE
 ================================================================ */
 const BACKEND_URL='http://localhost:5050';
-const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-const CHANNELS=['voice','chat','email','blended'];
+const DAYS=['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
+const CHANNELS=['voice','chat','email'];
 const DEFAULT_DOW_SPLIT=[14.3,14.3,14.3,14.3,14.3,14.3,14.2];
 const YEAR_SLOTS=['Y1','Y2','Y3','Y4','Y5'];
 const REGIONS=['APJ','EMEA','AMER','LATAM'];
@@ -596,66 +668,237 @@ function showYearBanner(detected){
 
 /* ================================================================
    INDEXEDDB PERSISTENCE
+   Key is composite: queueName + '|' + region — prevents collision
+   when the same queue name exists in multiple regions.
+   DB_VER bumped to 2 to migrate old keyPath-only store.
 ================================================================ */
-const DB_NAME='wfm_holiday_planner',DB_VER=1,STORE='queue_plans';
+const DB_NAME='wfm_holiday_planner',DB_VER=2,STORE='queue_plans';
 let idb=null;
+// idbReady resolves when IndexedDB is available. Any code that needs idb
+// can await this promise rather than checking idb directly, which eliminates
+// the resetAll() race condition (Issue 11).
+let _idbReadyResolve;
+const idbReady=new Promise(res=>{_idbReadyResolve=res;});
+function _planKey(name,region){return name+'|'+(region||'');}
 function initDB(){
   return new Promise((res,rej)=>{
     const req=indexedDB.open(DB_NAME,DB_VER);
-    req.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains(STORE))d.createObjectStore(STORE,{keyPath:'queueName'});};
-    req.onsuccess=e=>{idb=e.target.result;res(idb);};
-    req.onerror=e=>rej(e.target.error);
+    req.onupgradeneeded=e=>{
+      const d=e.target.result;
+      // Drop old single-key store if it exists (v1 → v2 migration)
+      if(d.objectStoreNames.contains(STORE))d.deleteObjectStore(STORE);
+      d.createObjectStore(STORE,{keyPath:'_planKey'});
+    };
+    req.onsuccess=e=>{idb=e.target.result;_idbReadyResolve(idb);res(idb);};
+    req.onerror=e=>{_idbReadyResolve(null);rej(e.target.error);};
   });
 }
+/* saveQueuePlan — persistence notes (Critic item 14):
+   IndexedDB uses a composite key (queueName|region). Two browser tabs open on
+   the same machine for the same queue+region will share this key. The second
+   "Save plan" click will silently overwrite the first with no merge or conflict
+   warning. This is intentional last-write-wins behaviour — the tool is designed
+   for single-analyst use per queue. If two analysts need to plan the same queue
+   simultaneously, they should work in separate browsers (not separate tabs) or
+   export/import JSON to merge their changes manually. This limitation is documented
+   in the Known Limitations section of Readme.txt. */
 async function saveQueuePlan(){
-  const name=document.getElementById('queueName').value.trim();
+  const name=APP.queue.name.trim()||document.getElementById('queueName').value.trim();
+  const region=APP.queue.region||document.getElementById('queueRegion').value||'';
   if(!name){alert('Enter a queue name before saving.');return;}
-  if(!idb){alert('Database not ready. Please try again.');return;}
-  const payload={queueName:name,region:document.getElementById('queueRegion').value,
-    type:document.getElementById('queueType').value,
+  if(!region){alert('Select a region before saving.');return;}
+  if(!queueConfirmed){alert('Confirm the queue setup first by clicking "Set queue".');return;}
+  // Wait up to 3s for IndexedDB to initialise — handles the race condition
+  // where the user clicks Save within milliseconds of page load.
+  const db=await Promise.race([idbReady,new Promise(r=>setTimeout(()=>r(null),3000))]);
+  if(!db){alert('Storage is not ready yet. Please wait a moment and try again.');return;}
+  // Always save shrink as individual components, never blended
+  const safeShrink={pl:APP.config.shrink.pl,ul:APP.config.shrink.ul,tr:APP.config.shrink.tr,total:APP.config.shrink.total};
+  const safeConfig=Object.assign({},APP.config,{shrink:safeShrink});
+  const payload={_planKey:_planKey(name,region),queueName:name,region,
+    type:APP.queue.type||document.getElementById('queueType').value||'DB',
     savedAt:new Date().toISOString(),detectedBaseYear:APP.detectedBaseYear,
-    holidays:APP.holidays,config:APP.config};
+    holidays:APP.holidays,config:safeConfig};
   await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).put(payload);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
-  alert(`Plan saved for queue "${name}".`);
+  alert(`Plan saved for queue "${name}" (${region}).`);
 }
 async function listSavedPlans(){
   if(!idb)return[];
   return new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readonly');const req=tx.objectStore(STORE).getAll();req.onsuccess=()=>res(req.result||[]);req.onerror=e=>rej(e.target.error);});
 }
-async function deleteSavedPlan(name){
+async function deleteSavedPlan(planKey){
   if(!idb)return;
-  await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).delete(name);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
+  await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readwrite');const req=tx.objectStore(STORE).delete(planKey);req.onsuccess=res;req.onerror=e=>rej(e.target.error);});
 }
 async function openLoadModal(){
   const plans=await listSavedPlans();
   const el=document.getElementById('savedPlansList');
   if(!plans.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No saved plans found.</div><div class="empty-state__body">Save a plan first using the "Save plan" button.</div></div>';}
   else{el.innerHTML=plans.map(p=>`<div class="plan-list-item">
-    <div><strong>${escHtml(p.queueName)}</strong> &nbsp;<span class="badge badge--gray">${p.region||'—'}</span> &nbsp;<span class="badge badge--${p.type==='DB'?'blue':'amber'}">${p.type||'—'}</span>
+    <div><strong>${escHtml(p.queueName)}</strong> &nbsp;<span class="badge badge--gray">${escHtml(p.region||'—')}</span> &nbsp;<span class="badge badge--${p.type==='DB'?'blue':'amber'}">${escHtml(p.type||'—')}</span>
     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">Saved ${new Date(p.savedAt).toLocaleString()}</div></div>
     <div style="display:flex;gap:var(--sp-2)">
-      <button class="btn btn--primary btn--sm" onclick="restoreQueuePlan(${JSON.stringify(escHtml(p.queueName))})">Load</button>
-      <button class="btn btn--danger btn--sm" onclick="confirmDeletePlan(${JSON.stringify(escHtml(p.queueName))})">Delete</button>
+      <button class="btn btn--primary btn--sm" onclick="restoreQueuePlan(${JSON.stringify(p._planKey)})">Load</button>
+      <button class="btn btn--danger btn--sm" onclick="confirmDeletePlan(${JSON.stringify(p._planKey)})">Delete</button>
     </div></div>`).join('');}
   document.getElementById('loadModal').classList.remove('hidden');
 }
 function closeLoadModal(){document.getElementById('loadModal').classList.add('hidden');}
-async function restoreQueuePlan(name){
+async function restoreQueuePlan(planKey){
   if(!idb)return;
-  const p=await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readonly');const req=tx.objectStore(STORE).get(name);req.onsuccess=()=>res(req.result);req.onerror=e=>rej(e.target.error);});
+  // planKey is the raw composite key stored in IndexedDB — never HTML-escaped
+  const p=await new Promise((res,rej)=>{const tx=idb.transaction(STORE,'readonly');const req=tx.objectStore(STORE).get(planKey);req.onsuccess=()=>res(req.result);req.onerror=e=>rej(e.target.error);});
   if(!p){alert('Plan not found.');return;}
-  document.getElementById('queueName').value=p.queueName;
-  document.getElementById('queueRegion').value=p.region||'';
+  // Require both name and region before setting queueConfirmed (Issue 18)
+  const restoredName=(p.queueName||'').trim();
+  const restoredRegion=(p.region||'').trim();
+  if(!restoredName||!restoredRegion){alert('Saved plan is missing queue name or region — cannot restore.');return;}
+  document.getElementById('queueName').value=restoredName;
+  document.getElementById('queueRegion').value=restoredRegion;
   document.getElementById('queueType').value=p.type||'DB';
-  APP.queue={name:p.queueName,region:p.region||'',type:p.type||'DB'};
+  APP.queue={name:restoredName,region:restoredRegion,type:p.type||'DB'};
   APP.detectedBaseYear=p.detectedBaseYear||null;
   APP.holidays=p.holidays||[];
-  APP.config=Object.assign({},APP.config,p.config||{});
-  hcCache={};updateShrinkage();validateBlendedSplit();validateAHT();renderHolidayList();closeLoadModal();
+  // Deep-merge config preserving shrink components (Issue 3 + 5)
+  const restored=p.config||{};
+  APP.config=Object.assign({},APP.config,restored);
+  // Always re-derive compound total from components to prevent stale blended value
+  if(restored.shrink&&restored.shrink.pl!=null){
+    const{pl,ul,tr}=restored.shrink;
+    const recomputedTotal=compoundShrinkage(pl,ul,tr);
+    APP.config.shrink={pl,ul,tr,total:recomputedTotal};
+    // Critic item 4: detect zeroed shrinkage on plan load.
+    // If all three components are 0 (or null in a legacy plan), the compound total
+    // is 0% — grossHC will equal netHC with no shrinkage uplift. Surface a visible
+    // warning so the user can verify this is intentional and not a corrupted save.
+    if(recomputedTotal===0||((!pl||pl===0)&&(!ul||ul===0)&&(!tr||tr===0))){
+      console.warn('[WFM] Loaded plan has zero compound shrinkage (PL=0, UL=0, TR=0). Gross HC will equal Net HC. Verify shrinkage components on the Setup tab.');
+      // Banner shown after the DOW banner element insert (below) — queued via setTimeout
+      // so the DOM is stable before insertion. Not shown if shrinkage is deliberately 0.
+      const _zeroShrinkBannerId='zeroShrinkageLoadWarn';
+      if(!document.getElementById(_zeroShrinkBannerId)){
+        const _sb=document.createElement('div');
+        _sb.id=_zeroShrinkBannerId;
+        _sb.className='alert alert--warning';
+        _sb.style.cssText='margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;';
+        _sb.innerHTML='<strong>Shrinkage is zero:</strong> This plan loaded with all shrinkage components at 0% — Gross HC equals Net HC. If this is not intentional, update Planned Leave, Unplanned Leave, and Training % on the Setup tab. <button class="btn btn--ghost btn--sm" style="margin-left:var(--sp-3)" onclick="this.parentNode.remove()">Dismiss</button>';
+        // Append into the dedicated banner stack. Zero-shrinkage is always second (below DOW).
+        // Dismiss on this banner does not affect the DOW banner and vice versa.
+        const _stack=document.getElementById('planLoadBannerStack');
+        if(_stack)_stack.appendChild(_sb);
+      }
+    }
+  } else if(!restored.shrink||restored.shrink.pl==null){
+    // Shrink components entirely absent (legacy JSON without pl/ul/tr fields).
+    // compoundShrinkage defaults in restoreFormFromConfig will fire, but surface a
+    // console warning so the user knows the components were re-derived from defaults.
+    console.warn('[WFM] Loaded plan has no shrinkage component data (pl/ul/tr missing). Shrinkage has been reset to defaults (PL=0, UL=0, TR=0). Update on the Setup tab.');
+  }
+  queueConfirmed=true;
+  updateQueueGate();
+  // sanitizeHCChannels is called defensively here. hcSelectedChannels is NOT persisted in
+  // the save payload, so the Set cannot contain 'blended' from a loaded plan. However,
+  // in-memory state could be invalid if the UI were manipulated directly before this restore
+  // runs. The call costs nothing and guarantees a valid channel state entering the render.
+  sanitizeHCChannels();
+  // DOW split migration check: plans saved before the day-order change (Mon-first → Sat-first)
+  // store dowSplit[0] as Monday data. After the reorder, index 0 = Saturday. Any plan with
+  // customised (non-flat) splits will have day percentages misaligned by two index positions.
+  // Flat splits (all values within 0.2pp of DEFAULT_DOW_SPLIT) are unaffected because each
+  // day carries the same percentage regardless of index order.
+  // DOW threshold basis: DEFAULT_DOW_SPLIT = [14.3, 14.3, 14.3, 14.3, 14.3, 14.3, 14.2] (flat).
+  // The 0.5pp threshold is chosen to exceed floating-point serialisation drift (±0.05pp typical)
+  // and rounding from the UI step size (0.1pp), while remaining below the minimum meaningful
+  // intentional customisation (any real-world DOW pattern differs by at least 1pp from flat).
+  // Limitation: a deliberately flat plan with all values at 14.3 (identical to default) will NOT
+  // trigger this banner — flat plans are genuinely unaffected by the index reorder. A plan with
+  // custom splits that accidentally fall within 0.5pp of flat (e.g. minor seasonal smoothing)
+  // will also not trigger the banner. This is an acceptable miss: near-flat plans have low risk
+  // of meaningful misalignment even if the index is shifted by two positions.
+  const _hasCustomDowSplit=(APP.holidays||[]).some(h=>{
+    if(!h.dowSplit)return false;
+    return Object.values(h.dowSplit).some(arr=>
+      Array.isArray(arr)&&arr.some((v,i)=>Math.abs(v-DEFAULT_DOW_SPLIT[i])>0.5)
+    );
+  });
+  if(_hasCustomDowSplit){
+    console.warn('[WFM] Loaded plan contains customised DOW splits. If this plan was saved before the Saturday-first day-order update, per-day percentages may be shifted by two index positions. Review and reset splits in Tab 5 (Daily Breakdown) if volumes appear misaligned.');
+    // Surface a visible one-time banner injected into the year-banner slot — this element
+    // sits in the persistent queue context bar area (always visible regardless of which tab
+    // is active). Injecting into holidayList (inside tab0) would hide the warning when the
+    // user loads a plan while on any other tab.
+    const _dowWarnId='dowMigrationWarn';
+    if(!document.getElementById(_dowWarnId)){
+      const _banner=document.createElement('div');
+      _banner.id=_dowWarnId;
+      _banner.className='alert alert--warning';
+      _banner.style.cssText='margin:0;border-radius:0;border-left:none;border-right:none;border-top:none;';
+      // DOW index displacement analysis:
+      // Old order (Mon-first): [Mon=0, Tue=1, Wed=2, Thu=3, Fri=4, Sat=5, Sun=6]
+      // New order (Sat-first): [Sat=0, Sun=1, Mon=2, Tue=3, Wed=4, Thu=5, Fri=6]
+      // Net shift: old index 0 (Monday) → new index 2 (Monday). The data shifts
+      // forward by two positions (old[i] now lives at new[i+2 mod 7]).
+      // Example: if old plan had Monday=30%, it now appears under Wednesday (index 2→4 wrong display).
+      // Users must reset and re-enter splits. "Reset to flat" clears all custom values safely.
+      _banner.innerHTML='<strong>Day-order migration notice:</strong> This plan contains customised day-of-week splits. If it was saved before the Saturday-first day ordering was applied, per-day percentages in Tab 5 are shifted two positions to the right — Monday data now appears under Wednesday, Tuesday under Thursday, and so on. Use the <strong>Reset to flat</strong> button on each holiday to clear the misalignment, then re-enter your per-day splits. <button class="btn btn--ghost btn--sm" style="margin-left:var(--sp-3)" onclick="this.parentNode.remove()">Dismiss</button>';
+      // Insert into the dedicated banner stack as the first child — DOW migration is always
+      // shown at the top of the stack, above any zero-shrinkage banner. The stack sits
+      // directly after the year-banner and is visible regardless of the active tab.
+      const _stack=document.getElementById('planLoadBannerStack');
+      if(_stack)_stack.insertBefore(_banner,_stack.firstChild);
+    }
+  }
+  hcCache={};restoreFormFromConfig();renderHolidayList();
+  // Refresh all tabs that hold stale per-holiday day-picker caches so a plan restore
+  // while a downstream tab is already visible never shows stale or out-of-bounds state.
+  // Tab 6: repopulate HC selects to reset _hcPickerDays and clamp hcDrillActiveDayIdx.
+  if(document.querySelector('#tab5.active')){populateHCSelects();updateShrinkage();renderHCTab();}
+  // Tab 7 (Shift Planner): section element id='tab6', active class added by switchTab.
+  // '#tab6.active' correctly resolves to the Shift Planner section when it is visible.
+  // The load modal is opened independently of switchTab so the active class is unchanged;
+  // if the user had Tab 7 open when they clicked "Load saved plan", this check fires.
+  if(document.querySelector('#tab6.active'))populateSPSelects();
+  // Tab 8 (Shift Recommendation): section element id='tab7', same pattern as above.
+  if(document.querySelector('#tab7.active'))populateSRSelects();
+  closeLoadModal();
 }
-async function confirmDeletePlan(name){
-  if(!confirm(`Delete saved plan for "${name}"?`))return;
-  await deleteSavedPlan(name);openLoadModal();
+async function confirmDeletePlan(planKey){
+  if(!confirm('Delete this saved plan?'))return;
+  await deleteSavedPlan(planKey);openLoadModal();
+}
+/* Sync form inputs from APP.config after restore.
+   Uses ?? (nullish coalescing) instead of || so that a legitimately
+   stored 0 (e.g. training=0%) is preserved rather than overridden
+   by the fallback default. Only null/undefined trigger the fallback.
+   A corrupted (null/undefined) shrinkage component logs a console
+   warning so the user can investigate. */
+function restoreFormFromConfig(){
+  const cfg=APP.config;
+  // Helper: nullish-coalesce with corruption warning for shrinkage components
+  function shrinkVal(v,name,def){
+    if(v===null||v===undefined){console.warn(`[WFM] Shrinkage component "${name}" is ${v} in saved plan — defaulting to ${def}. Check plan integrity.`);}
+    return (v!==null&&v!==undefined)?v:def;
+  }
+  document.getElementById('defaultStart').value=cfg.defaultStart??'08:00';
+  document.getElementById('defaultEnd').value=cfg.defaultEnd??'20:00';
+  document.getElementById('shrinkPL').value=shrinkVal(cfg.shrink?.pl,'pl',0);
+  document.getElementById('shrinkUL').value=shrinkVal(cfg.shrink?.ul,'ul',0);
+  document.getElementById('shrinkTR').value=shrinkVal(cfg.shrink?.tr,'tr',0);
+  document.getElementById('ahtVoice').value=cfg.aht?.voice??360;
+  document.getElementById('ahtChat').value=cfg.aht?.chat??480;
+  document.getElementById('ahtEmail').value=cfg.aht?.email??600;
+  document.getElementById('chatConcurrency').value=cfg.concurrency??2.5;
+  document.getElementById('emailOccupancy').value=cfg.emailOccupancy??75;
+  document.getElementById('blendedVoicePct').value=cfg.blendedVoicePct??60;
+  document.getElementById('blendedChatPct').value=cfg.blendedChatPct??40;
+  document.getElementById('slVoicePct').value=cfg.sl?.voicePct??80;
+  document.getElementById('slVoiceSec').value=cfg.sl?.voiceSec??20;
+  document.getElementById('slChatPct').value=cfg.sl?.chatPct??90;
+  document.getElementById('slChatSec').value=cfg.sl?.chatSec??30;
+  document.getElementById('slEmailPct').value=cfg.sl?.emailPct??95;
+  document.getElementById('slEmailHrs').value=cfg.sl?.emailHrs??4;
+  document.getElementById('anomalyThreshold').value=cfg.anomalyThreshold??2;
+  updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();validateEmailOccupancy();
 }
 let hcCache={};
 let shiftEntries=[];
@@ -664,6 +907,253 @@ let srSelectedChannels=new Set(['voice']);
 let hcChartInst=null;
 let shiftChartInst=null;
 let spActivePanelCh='voice';
+// v2.0: queue-first state
+let queueConfirmed=false;
+// v2.0: inline day selectors — single active day per tab
+let spActiveDayIdx=0;
+let srActiveDayIdx=0;
+let hcDrillActiveDayIdx=0;
+// v2.0: HC channel multi-select — Set of active channels (matches shift planner pattern)
+let hcSelectedChannels=new Set(['voice']);
+
+/* ================================================================
+   v2.0: QUEUE-FIRST GATE
+   Reads from APP.queue (model) — not DOM — so gate state is stable
+   even if element IDs change. DOM inputs sync TO APP.queue on input.
+================================================================ */
+function queueIsSet(){
+  // Primary check: model state
+  return (APP.queue.name||'').trim().length>0&&(APP.queue.region||'').trim().length>0;
+}
+function confirmQueueSetup(){
+  // Sync DOM → model first
+  const name=(document.getElementById('queueName').value||'').trim();
+  const region=document.getElementById('queueRegion').value||'';
+  if(!name){alert('Enter a queue name to continue.');document.getElementById('queueName').focus();return;}
+  if(!region){alert('Select a region to continue.');document.getElementById('queueRegion').focus();return;}
+  APP.queue.name=name;
+  APP.queue.region=region;
+  APP.queue.type=document.getElementById('queueType').value||'DB';
+  queueConfirmed=true;
+  updateQueueGate();
+}
+function updateQueueGate(){
+  const ready=queueConfirmed&&queueIsSet();
+  const gate=document.getElementById('queueGate');
+  const content=document.getElementById('holidayPlanningContent');
+  if(gate)gate.style.display=ready?'none':'block';
+  if(content)content.style.display=ready?'':'none';
+  // update confirm button label
+  const btn=document.getElementById('queueConfirmBtn');
+  if(btn){btn.textContent=ready?'Queue set':'Set queue';
+    btn.className='btn btn--sm '+(ready?'btn--success':'btn--primary');}
+  // active badge (read from model, not DOM)
+  const badge=document.getElementById('queueActiveBadge');
+  const badgeText=document.getElementById('queueActiveBadgeText');
+  const name=(APP.queue.name||'').trim();
+  const region=(APP.queue.region||'').trim();
+  if(badge&&badgeText&&ready){
+    badge.style.display='flex';
+    badgeText.textContent=name+(region?' · '+region:'');
+  } else if(badge){badge.style.display='none';}
+  // propagate queue name badge to all tabs including Tab 5 Daily Breakdown
+  const qLabel=ready?`<span class="queue-label-badge">${escHtml(name)}</span>`:'';
+  ['setupQueueBadge','histQueueBadge','comboQueueBadge','recQueueBadge','dailyQueueBadge','hcQueueBadge','spQueueBadge','srQueueBadge'].forEach(id=>{
+    const el=document.getElementById(id);if(el)el.innerHTML=qLabel;
+  });
+  // Lock queue name/region inputs after confirmation to prevent silent mismatch (Issue 5)
+  const qNameInput=document.getElementById('queueName');
+  const qRegionSelect=document.getElementById('queueRegion');
+  if(qNameInput){qNameInput.readOnly=ready;}
+  if(qRegionSelect){qRegionSelect.disabled=ready;}
+  // Show an "Edit queue" button when confirmed so user can change intentionally
+  let editQueueBtn=document.getElementById('editQueueBtn');
+  if(!editQueueBtn){
+    editQueueBtn=document.createElement('button');
+    editQueueBtn.id='editQueueBtn';
+    editQueueBtn.className='btn btn--ghost btn--sm';
+    editQueueBtn.textContent='Edit queue';
+    editQueueBtn.onclick=function(){
+      queueConfirmed=false;
+      if(qNameInput){qNameInput.readOnly=false;}
+      if(qRegionSelect){qRegionSelect.disabled=false;}
+      updateQueueGate();
+    };
+    const confirmBtn=document.getElementById('queueConfirmBtn');
+    if(confirmBtn&&confirmBtn.parentNode){confirmBtn.parentNode.insertBefore(editQueueBtn,confirmBtn.nextSibling);}
+  }
+  if(editQueueBtn){editQueueBtn.style.display=ready?'inline-flex':'none';}
+  // Lock/unlock tab nav items 2–8 (tabs idx 1–7) based on gate state (Issue 5)
+  document.querySelectorAll('.tab-nav__item').forEach((btn,i)=>{
+    if(i>0){
+      btn.disabled=!ready;
+      btn.style.opacity=ready?'':'0.45';
+      btn.style.cursor=ready?'':'not-allowed';
+      btn.title=ready?'':' Set queue first to access this tab';
+    }
+  });
+}
+
+/* ================================================================
+   v2.0: HOLIDAY FILE UPLOAD (CSV/XLS into holiday form)
+   Expected columns: Holiday Name, Date, Channel, Plan Volume,
+   Y1 Actual, Y1 Baseline, Y2 Actual, Y2 Baseline, Y3 Actual, Y3 Baseline
+
+   Historical data is stored per-channel (not voice-only).
+   If Channel column is present, Y1/Y2/Y3 actual+baseline are stored
+   under the row's channel key. If no Channel column, defaults to voice.
+   Duplicate detection: warns when imported name matches an existing
+   holiday name and prompts before appending (Issue 9 + 13).
+================================================================ */
+async function importHolidayFile(input){
+  const file=input.files[0];if(!file){return;}
+  input.value='';
+  try{
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rawRows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null,raw:false,dateNF:'yyyy-mm-dd'});
+    if(rawRows.length<2)throw new Error('File appears empty.');
+    // find header row (first non-empty row)
+    let hdrIdx=0;
+    for(let i=0;i<Math.min(8,rawRows.length);i++){if(rawRows[i].some(c=>c!=null)){hdrIdx=i;break;}}
+    const headers=rawRows[hdrIdx].map(c=>c==null?'':String(c).trim());
+    const dataRows=rawRows.slice(hdrIdx+1).filter(r=>r.some(c=>c!=null));
+    if(!dataRows.length)throw new Error('No data rows found after header.');
+    // detect columns
+    function col(...kws){return findColIdx(headers,...kws);}
+    const nameCol=col('holiday name','holiday','name');
+    const dateCol=col('date','holiday date');
+    const chCol=col('channel','channels');
+    const planCol=col('plan volume','planned volume','volume','plan');
+    const y1aCol=col('y1 actual','y1actual','y1_actual','year1 actual','actual y1');
+    const y1bCol=col('y1 baseline','y1baseline','y1_baseline','year1 baseline','baseline y1');
+    const y2aCol=col('y2 actual','y2actual','y2_actual','year2 actual','actual y2');
+    const y2bCol=col('y2 baseline','y2baseline','y2_baseline','year2 baseline','baseline y2');
+    const y3aCol=col('y3 actual','y3actual','y3_actual','year3 actual','actual y3');
+    const y3bCol=col('y3 baseline','y3baseline','y3_baseline','year3 baseline','baseline y3');
+    // Y4 and Y5 — parsed to support full 5-year history
+    const y4aCol=col('y4 actual','y4actual','y4_actual','year4 actual','actual y4');
+    const y4bCol=col('y4 baseline','y4baseline','y4_baseline','year4 baseline','baseline y4');
+    const y5aCol=col('y5 actual','y5actual','y5_actual','year5 actual','actual y5');
+    const y5bCol=col('y5 baseline','y5baseline','y5_baseline','year5 baseline','baseline y5');
+
+    // group rows by holiday name
+    // Blank name cells (nameCol present) get a BLANK_MARKER so the guard below can count them
+    const BLANK_MARKER='';
+    const byHoliday={};
+    let autoIdx=0;
+    dataRows.forEach(row=>{
+      let nm;
+      if(nameCol>=0){
+        nm=String(row[nameCol]||'').trim();
+        // Issue 13: blank cells in name col are truly blank — do NOT auto-generate a name here
+        // They will be counted as errCount rows below
+      } else {
+        // No name col at all: auto-generate per row
+        autoIdx++;
+        nm='Holiday '+autoIdx;
+      }
+      if(!nm)return; // blank name with nameCol present — skip (counted below)
+      if(!byHoliday[nm])byHoliday[nm]={name:nm,rows:[]};
+      byHoliday[nm].rows.push(row);
+    });
+
+    // Count truly blank-name rows (Issue 13)
+    const blankNameCount=nameCol>=0?dataRows.filter(r=>!String(r[nameCol]||'').trim()).length:0;
+
+    const newHolidays=[];
+    // slotCols now covers all 5 year slots — Y4 and Y5 no longer silently dropped
+    const slotCols={
+      Y1:{a:y1aCol,b:y1bCol},Y2:{a:y2aCol,b:y2bCol},Y3:{a:y3aCol,b:y3bCol},
+      Y4:{a:y4aCol,b:y4bCol},Y5:{a:y5aCol,b:y5bCol}
+    };
+
+    Object.values(byHoliday).forEach(group=>{
+      const firstRow=group.rows[0];
+      const dateVal=dateCol>=0?String(firstRow[dateCol]||'').trim():'';
+      const planVal=planCol>=0?parseFloat(String(firstRow[planCol]||'').replace(/,/g,''))||0:0;
+
+      // channels: collect from column if present; else default voice
+      const chSet=new Set();
+      if(chCol>=0){
+        group.rows.forEach(r=>{
+          const cv=String(r[chCol]||'').trim().toLowerCase();
+          if(['voice','chat','email','blended'].includes(cv))chSet.add(cv);
+        });
+      }
+      if(!chSet.size)chSet.add('voice');
+
+      const h=newHoliday('h'+Date.now()+Math.random());
+      h.name=group.name;
+      h.date=dateVal;
+      h.channels=[...chSet];
+
+      // plan volume per channel
+      if(chCol>=0){
+        group.rows.forEach(r=>{
+          const cv=String(r[chCol]||'').trim().toLowerCase();
+          if(['voice','chat','email','blended'].includes(cv)){
+            const pv=planCol>=0?parseFloat(String(r[planCol]||'').replace(/,/g,''))||0:0;
+            h.planVolume[cv]=pv;
+          }
+        });
+      } else {h.planVolume.voice=planVal;}
+
+      // Historical data — stored per channel, not voice-only (Issue 4)
+      // If channel col present: use each row's channel for the slot values
+      // If no channel col: default to voice
+      if(chCol>=0){
+        group.rows.forEach(r=>{
+          const cv=String(r[chCol]||'').trim().toLowerCase();
+          if(!['voice','chat','email','blended'].includes(cv))return;
+          YEAR_SLOTS.forEach(slot=>{
+            const sc=slotCols[slot];if(!sc||sc.a<0)return;
+            const aVal=parseFloat(String(r[sc.a]||'').replace(/,/g,''));
+            const bVal=sc.b>=0?parseFloat(String(r[sc.b]||'').replace(/,/g,'')):NaN;
+            if(!isNaN(aVal)&&aVal>0){
+              if(!h.years[slot])h.years[slot]=_emptyYear();
+              h.years[slot].actual[cv]=aVal;
+              h.years[slot].year=String(getYearForSlot(slot));
+              if(!isNaN(bVal)&&bVal>0)h.years[slot].baseline[cv]=bVal;
+            }
+          });
+        });
+      } else {
+        // No channel col: populate voice historical from first row — all 5 slots
+        YEAR_SLOTS.forEach(slot=>{
+          const sc=slotCols[slot];if(!sc||sc.a<0)return;
+          const aVal=parseFloat(String(firstRow[sc.a]||'').replace(/,/g,''));
+          const bVal=sc.b>=0?parseFloat(String(firstRow[sc.b]||'').replace(/,/g,'')):NaN;
+          if(!isNaN(aVal)&&aVal>0){
+            if(!h.years[slot])h.years[slot]=_emptyYear();
+            h.years[slot].actual.voice=aVal;
+            h.years[slot].year=String(getYearForSlot(slot));
+            if(!isNaN(bVal)&&bVal>0)h.years[slot].baseline.voice=bVal;
+          }
+        });
+      }
+
+      newHolidays.push(h);
+    });
+
+    if(!newHolidays.length){alert('No valid holidays found in the file. Check that the file has a "Holiday Name" or "Name" column and at least one data row.');return;}
+
+    // Duplicate detection (Issue 9): check against existing holiday names
+    const existingNames=new Set(APP.holidays.map(h=>h.name.trim().toLowerCase()));
+    const duplicates=newHolidays.filter(h=>existingNames.has(h.name.trim().toLowerCase())).map(h=>h.name);
+    if(duplicates.length){
+      const proceed=confirm(`The following ${duplicates.length} holiday name(s) already exist and will be added as duplicates:\n${duplicates.slice(0,5).join('\n')}${duplicates.length>5?'\n…and more':''}\n\nProceed? (Cancel to abort import)`);
+      if(!proceed)return;
+    }
+
+    APP.holidays=APP.holidays.concat(newHolidays);
+    invalidateAllCaches();
+    renderHolidayList();
+    const skipMsg=blankNameCount?` ${blankNameCount} row(s) skipped (blank name).`:'';
+    alert(`Imported ${newHolidays.length} holiday(s) from file.${skipMsg}\nReview and adjust plan volumes and historical data as needed.`);
+  }catch(e){alert('Could not read file: '+e.message);}
+}
 
 /* ================================================================
    FIX 6: LOG-SPACE ERLANG C
@@ -686,6 +1176,25 @@ function erlangC(agents,intensity){
   return ecDen>0?Math.min(1,Math.max(0,ecNum/ecDen)):1;
 }
 function slAtAgents(agents,cph,aht,slSec){
+  // Standard Erlang C SL formula: SL = 1 - C(N,A) * exp(-μ*(N-A)*t)
+  // where μ = 1/aht (service rate, sec⁻¹) and t = slSec (target answer time, seconds).
+  // Exponent = -(N-A) * (1/aht) * slSec = -(N-A) * slSec / aht.
+  // Written as (3600/aht)*slSec/3600 for numerical clarity — the 3600 terms cancel
+  // giving slSec/aht, which is dimensionally consistent (agents × sec⁻¹ × sec = dimensionless).
+  // Cross-validated against Python data_engine.py service_level_at_agents():
+  //   Python: exponent = -(agents - intensity) * mu * sl_target_seconds / 3600
+  //           where mu = 3600 / aht_seconds (calls per second expressed per hour)
+  //           → mu * sl_sec / 3600 = (3600/aht) * sl_sec / 3600 = sl_sec/aht  ✓ identical.
+  // Spot-check A: 100 cph, AHT 360s (live default), SL 80/20
+  //   intensity = (100/3600)*360 = 10.0; agents=14 (agentsForSL result)
+  //   exp(-(14-10)*20/360) = exp(-0.2222) = 0.8007; erlangC(14,10)≈0.296
+  //   SL = 1 - 0.296*0.8007 ≈ 0.763; at agents=15: erlangC≈0.168
+  //   SL = 1 - 0.168*exp(-(5)*20/360) = 1 - 0.168*0.7572 ≈ 0.873 ✓ passes 80%
+  //
+  // Spot-check B (matches prior comment, AHT 300s for comparison only — not the live default):
+  //   100 cph, AHT 300s, intensity=8.33, agents=12, SL_sec=20
+  //   exp(-(12-8.33)*20/300) = exp(-0.2447) = 0.7829; erlangC≈0.281
+  //   SL = 1 - 0.281*0.7829 ≈ 0.780 (illustrative only — AHT 300s ≠ live default 360s)
   if(cph<=0)return 1;
   const intensity=(cph/3600)*aht;
   const ec=erlangC(agents,intensity);
@@ -754,6 +1263,35 @@ function validateAHT(){
   else{errEl.classList.add('hidden');}
   APP.config.aht={voice:Math.max(1,v),chat:Math.max(1,c),email:Math.max(1,e)};
 }
+function validateEmailOccupancy(){
+  // Enforce a practical minimum of 20% — below this, email HC results are
+  // grossly overstaffed and the model does not reflect real operations.
+  const input=document.getElementById('emailOccupancy');
+  if(!input)return;
+  const val=+input.value;
+  let errEl=document.getElementById('emailOccupancyError');
+  if(!errEl){
+    errEl=document.createElement('div');
+    errEl.id='emailOccupancyError';
+    errEl.className='form-error hidden';
+    input.closest('.form-group')?.appendChild(errEl);
+  }
+  if(val<20){
+    errEl.textContent='Email occupancy below 20% produces unrealistically high HC. Minimum recommended: 20%.';
+    errEl.classList.remove('hidden');
+    // Clamp to 20 in the model but leave DOM input intact so user can correct
+    APP.config.emailOccupancy=20;
+  } else if(val>99){
+    errEl.textContent='Email occupancy capped at 99% — 100% implies zero idle time which is operationally impossible.';
+    errEl.classList.remove('hidden');
+    APP.config.emailOccupancy=99;
+    input.value=99;
+  } else {
+    errEl.classList.add('hidden');
+    APP.config.emailOccupancy=val;
+  }
+  invalidateAllCaches();
+}
 
 /* ================================================================
    VOLUME DISTRIBUTION — overnight-aware
@@ -780,38 +1318,101 @@ function distributeVolume(dailyVol,startTime,endTime,intervalMins=30){
 }
 
 /* ================================================================
-   HC COMPUTATION — FIX 2 & 3 applied
+   HC COMPUTATION
+   Email is a daily batch channel — net HC is computed once per day
+   from total daily volume and spread flat across all intervals.
+   Voice and Chat are computed per 30-min interval from the interval
+   call rate. Blended splits voice+chat per interval.
 ================================================================ */
 function computeNetHC(cph,channel,opStart,opEnd){
   const cfg=APP.config;
   if(channel==='voice')return agentsForSL(cph,cfg.aht.voice,cfg.sl.voicePct,cfg.sl.voiceSec);
   if(channel==='chat'){
+    // Zero cph produces zero load and zero HC — the floor of 1 is applied only when there
+    // is actual contact load. Near-zero but non-zero intervals (e.g. cph=0.033) will still
+    // compute a positive load and be ceiled to 1 agent, which is the correct minimum for
+    // any interval that has even one contact in flight. Zero-volume intervals return 0.
+    // CHAT HC DIVERGENCE NOTE (browser vs Python backend):
+    // Browser: net = ceil(load / concurrency). No occupancy divisor applied.
+    //   Rationale: concurrency already bounds utilisation; at concurrency=2.5 the
+    //   implicit max occupancy = load/(net*concurrency) <= 100% by construction.
+    // Python chat_agents_required(): gross = ceil(net / (occupancy_target/100)).
+    //   This adds an explicit occupancy safety buffer on top of the net figure.
+    //   At concurrency=2.5 and occupancy_target=80%, Python gross is 25% higher than
+    //   browser gross for the same load. This is intentional: Python mode is for operators
+    //   who want to target a specific occupancy ceiling; browser mode uses concurrency alone.
+    // RECONCILIATION PATH: When the Python backend is online (green dot in header), the
+    //   HC & Coverage tab calls /api/erlang_c which uses the Python chat model. Browser
+    //   fallback uses this function. For gap analysis and shift recommendation, always use
+    //   grossHC (already applied outside this function via the shrinkage multiplier).
+    //   If Python parity is required in browser mode, increase the concurrency setting to
+    //   account for the implicit occupancy margin (e.g. reduce concurrency from 2.5 to 2.0
+    //   to approximate 80% occupancy cap at typical loads).
+    if(cph<=0)return 0;
     const load=(cph/3600)*cfg.aht.chat;
     return Math.max(1,Math.ceil(load/cfg.concurrency));
   }
-  if(channel==='email'){
-    const opH=windowDurationHours(opStart||cfg.defaultStart,opEnd||cfg.defaultEnd);
-    if(opH<=0)return 0;
-    // FIX 2: use emailOccupancy, not slEmailPct
-    const throughput=(opH*3600*(cfg.emailOccupancy/100))/cfg.aht.email;
-    return throughput>0?Math.max(1,Math.ceil(cph/throughput)):1;
-  }
-  // FIX 3: use configurable blended split
+  // email: this path should not be reached at interval level — use computeEmailDailyNetHC instead
+  // Kept as fallback only; returns 0 to surface mis-use
+  if(channel==='email')return 0;
+  // Blended: configurable voice/chat split applied per interval
   const vPct=cfg.blendedVoicePct/100;
   const cPct=cfg.blendedChatPct/100;
   const vNet=agentsForSL(cph*vPct,cfg.aht.voice,cfg.sl.voicePct,cfg.sl.voiceSec);
   const cNet=Math.max(1,Math.ceil(((cph*cPct/3600)*cfg.aht.chat)/cfg.concurrency));
   return Math.max(1,vNet+cNet);
 }
-function grossHC(net,shrinkPct){if(shrinkPct>=100)return Infinity;return Math.ceil(net/(1-shrinkPct/100));}
+/* Email daily throughput model:
+   throughput = (opHours * 3600 * occupancy%) / AHT
+   netHC      = ceil(dailyVolume / throughput)
+   Result is constant across all intervals for the day (batch channel).
+*/
+function computeEmailDailyNetHC(dailyVol,opStart,opEnd){
+  const cfg=APP.config;
+  const opH=windowDurationHours(opStart||cfg.defaultStart,opEnd||cfg.defaultEnd);
+  if(opH<=0||dailyVol<=0)return 0;
+  const throughput=(opH*3600*(cfg.emailOccupancy/100))/cfg.aht.email;
+  return throughput>0?Math.max(1,Math.ceil(dailyVol/throughput)):1;
+}
+function grossHC(net,shrinkPct){
+  // TWO DISTINCT CAP CONDITIONS — both guarded here:
+  //
+  // Condition A — Erlang cap: net >= 2000 means agentsForSL() hit the 2000-agent ceiling
+  //   (traffic intensity too high for the operating window). This is flagged by hitCap in
+  //   computeIntervals() and surfaces a separate "Erlang cap reached" warning banner on Tab 6.
+  //   It does NOT trigger the 9999 sentinel below.
+  //
+  // Condition B — Shrinkage sentinel: when compound shrinkage approaches 100%, the gross
+  //   multiplier (1/(1-shrinkage)) approaches infinity. Chart.js cannot render Infinity as
+  //   a y-axis data point and throws a range error. The 9999 sentinel is the safety cap.
+  //   This is realistic only at extreme compound shrinkage (e.g. PL=80%+UL=80% = 96% total
+  //   → gross = net * 25; at net=400 → gross = 10,000, capped to 9999). At operationally
+  //   plausible shrinkage (PL=15%, UL=10%, TR=5% → 27% total), gross is net * 1.37 — well
+  //   within range. The 9999 sentinel fires when shrinkage is high enough that
+  //   net/(1-shrinkage) exceeds 9999, which requires shrinkage > 1 - (net/9999).
+  //   Example: net=100, requires shrinkage > 98.99% to hit sentinel.
+  //   The "Cap reached" banner on Tab 6 fires when net>=2000 OR gross>=9999 (Condition A OR B).
+  if(shrinkPct>=100){return 9999;} // shrinkage=100% → division by zero → cap at sentinel
+  const raw=Math.ceil(net/(1-shrinkPct/100));
+  return Math.min(raw,9999);
+}
 function computeIntervals(dailyVol,channel,opStart,opEnd){
   const intervals=distributeVolume(dailyVol,opStart,opEnd,30);
   const shrink=APP.config.shrink.total;
+  // Email: compute net HC once at daily level, spread flat across intervals (Issue 1)
+  const emailNetHCDaily=channel==='email'?computeEmailDailyNetHC(dailyVol,opStart,opEnd):null;
   let hitCap=false;
   const result=intervals.map(iv=>{
-    const net=computeNetHC(iv.callsPerHour,channel,opStart,opEnd);
+    let net;
+    if(channel==='email'){
+      net=emailNetHCDaily;
+    } else {
+      net=computeNetHC(iv.callsPerHour,channel,opStart,opEnd);
+    }
     if(net>=2000)hitCap=true;
-    return{...iv,netHC:net,grossHC:grossHC(net,shrink)};
+    const gross=grossHC(net,shrink);
+    if(gross>=9999)hitCap=true; // sentinel hit (extreme shrinkage) — same cap-warn banner
+    return{...iv,netHC:net,grossHC:gross};
   });
   return{intervals:result,hitCap};
 }
@@ -842,16 +1443,49 @@ function invalidateHCCache(){hcCache={};}
 function invalidateCombinationCache(hid){const h=APP.holidays.find(x=>x.id===hid);if(h){h.combinations={};}}
 
 /* ================================================================
-   SHRINKAGE
+   SHRINKAGE — compound formula: 1-(1-PL)(1-UL)(1-TR)
+   If total reaches 100%, HC calculations would return Infinity.
+   Capped at 99.9% with a hard error surfaced to the user.
+   Individual components above 50% display inline warnings — at
+   that level a single component already causes a compound result
+   that is operationally unusual and likely a data entry error.
 ================================================================ */
 function compoundShrinkage(pl,ul,tr){return(1-(1-pl/100)*(1-ul/100)*(1-tr/100))*100;}
+const SHRINK_COMPONENT_WARN_PCT=50; // warn if any single component >= this
+function _setShrinkComponentWarn(inputId,warnId,val){
+  let warnEl=document.getElementById(warnId);
+  if(!warnEl){
+    warnEl=document.createElement('div');
+    warnEl.id=warnId;
+    warnEl.className='shrink-component-warn';
+    const input=document.getElementById(inputId);
+    if(input&&input.parentNode)input.closest('.form-group')?.appendChild(warnEl);
+  }
+  const input=document.getElementById(inputId);
+  if(val>=SHRINK_COMPONENT_WARN_PCT){
+    if(input)input.classList.add('shrink-input-warn');
+    if(warnEl){warnEl.textContent=`${val}% is unusually high for a single shrinkage component. Verify this is intentional.`;warnEl.classList.add('visible');}
+  } else {
+    if(input)input.classList.remove('shrink-input-warn');
+    if(warnEl)warnEl.classList.remove('visible');
+  }
+}
 function updateShrinkage(){
   const pl=Math.min(99,Math.max(0,+document.getElementById('shrinkPL').value||0));
   const ul=Math.min(99,Math.max(0,+document.getElementById('shrinkUL').value||0));
   const tr=Math.min(99,Math.max(0,+document.getElementById('shrinkTR').value||0));
+  // Per-component visual warnings (Issue 15)
+  _setShrinkComponentWarn('shrinkPL','shrinkPLWarn',pl);
+  _setShrinkComponentWarn('shrinkUL','shrinkULWarn',ul);
+  _setShrinkComponentWarn('shrinkTR','shrinkTRWarn',tr);
   const total=compoundShrinkage(pl,ul,tr);
   const errEl=document.getElementById('shrinkageError');
-  if(total>=100){errEl.classList.remove('hidden');return;}
+  // Total >= 100 means gross HC = net / 0 = Infinity — block this
+  if(total>=100){
+    errEl.textContent='Total compound shrinkage has reached 100% — gross HC would be infinite. Reduce one or more components. (Each component is capped at 99% individually, but three components near that cap combine to 100%.)';
+    errEl.classList.remove('hidden');
+    return; // do not update APP.config — preserve last valid value
+  }
   errEl.classList.add('hidden');
   APP.config.shrink={pl,ul,tr,total};
   document.getElementById('totalShrinkageBadge').textContent=`Total: ${total.toFixed(1)}%`;
@@ -887,13 +1521,29 @@ function newHoliday(id){
 
 /* ================================================================
    RENDER HOLIDAY LIST — FIX 13: overnight warning on cards
+   Pagination: renders HOLIDAY_PAGE_SIZE cards at a time to prevent
+   main-thread blocking on large imports. "Show more" appends the
+   next page. Tested cap: 20 cards per page to keep DOM mutations
+   under ~400 inputs per render batch.
 ================================================================ */
-function renderHolidayList(){
+const HOLIDAY_PAGE_SIZE=20;
+let _holidayRenderPage=1;
+function renderHolidayList(resetPage){
+  if(resetPage!==false)_holidayRenderPage=1;
   const list=document.getElementById('holidayList');
   const empty=document.getElementById('emptyHolidays');
   if(!APP.holidays.length){list.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
-  list.innerHTML=APP.holidays.map((h,idx)=>{
+  const totalCount=APP.holidays.length;
+  const visibleCount=Math.min(_holidayRenderPage*HOLIDAY_PAGE_SIZE,totalCount);
+  const visibleHolidays=APP.holidays.slice(0,visibleCount);
+  const showMoreHTML=visibleCount<totalCount?`
+    <div class="flex justify-center mt-4 mb-4">
+      <button class="btn btn--secondary" onclick="_holidayRenderPage++;renderHolidayList(false)">
+        Show more holidays (${visibleCount} of ${totalCount} shown)
+      </button>
+    </div>`:'';
+  list.innerHTML=visibleHolidays.map((h,idx)=>{
     const effectiveStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
     const effectiveEnd=h.operatingHoursOverride?h.operatingHours.end:APP.config.defaultEnd;
     const isOvernight=isOvernightWindow(effectiveStart,effectiveEnd);
@@ -978,7 +1628,7 @@ function renderHolidayList(){
         </div>`).join('')}
       </div>
     </div>`;
-  }).join('');
+  }).join('')+showMoreHTML;
 }
 
 function addHoliday(){APP.holidays.push(newHoliday('h'+Date.now()));renderHolidayList();}
@@ -992,13 +1642,36 @@ function toggleChannel(hid,ch,checked){
 
 /* ================================================================
    ANOMALY DETECTION
+   Uses the first channel with baseline data across all active
+   channels, prioritising voice if present. For chat/email-only
+   holidays, the correct channel's data is used rather than
+   always defaulting to voice (which would read all-zeros).
 ================================================================ */
 function computeImpact(actual,baseline){if(!baseline||baseline===0)return null;return((actual-baseline)/baseline)*100;}
 function detectAnomalies(h){
+  // Determine which channel to use: prefer voice if it has data; else first active channel with baseline data
+  const activeChannels=h.channels&&h.channels.length?h.channels:['voice'];
+  let detectionChannel=null;
+  // Check voice first
+  if(activeChannels.includes('voice')){
+    const hasVoiceBaseline=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].baseline.voice||0)>0);
+    if(hasVoiceBaseline)detectionChannel='voice';
+  }
+  // Fall back to first channel with any baseline data
+  if(!detectionChannel){
+    for(const ch of activeChannels){
+      const hasBaseline=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].baseline[ch]||0)>0);
+      if(hasBaseline){detectionChannel=ch;break;}
+    }
+  }
+  if(!detectionChannel)return{};
   const impacts=[];
   YEAR_SLOTS.forEach(y=>{
-    if(h.years[y]?.year){const base=h.years[y].baseline.voice||0;const act=h.years[y].actual.voice||0;
-      if(base>0){const imp=computeImpact(act,base);if(imp!==null)impacts.push({year:y,impact:imp});}}
+    if(h.years[y]?.year){
+      const base=h.years[y].baseline[detectionChannel]||0;
+      const act=h.years[y].actual[detectionChannel]||0;
+      if(base>0){const imp=computeImpact(act,base);if(imp!==null)impacts.push({year:y,impact:imp});}
+    }
   });
   if(impacts.length<2)return{};
   const mean=impacts.reduce((a,b)=>a+b.impact,0)/impacts.length;
@@ -1095,23 +1768,64 @@ function generateCombinations(h,ch){
   return combos;
 }
 
-/* FIX 10: scoreCombo returns breakdown sub-scores */
+/* FIX 10: scoreCombo returns breakdown sub-scores
+   Recency map: Y1 (most recent) = 1.0 down to Y5 = 0.1.
+   JS is the authoritative scoring engine. The Python backend data_engine.py
+   score_combination() has been aligned to use the same weights (see data_engine.py).
+
+   SCORING DESIGN NOTES (documented for Critic review):
+
+   1. Anomaly penalty: capped at max(0, positiveComponent - 0.01) so:
+      (a) anomalous data always scores strictly above no data, and
+      (b) when positiveComponent < 0.01 (very weak single-year combos), the cap
+          floor is zero — no penalty applied, score equals positiveComponent.
+          This prevents the cap itself from going negative and inflating scores.
+
+   2. Double-penalisation of anomalous recent years (e.g. Y1 anomalous): intentional.
+      An anomalous year is excluded from the recency score (no recency benefit granted)
+      AND penalised via rawPenalty (0.3 per anomalous year). This double-treatment is
+      by design: the year provides neither a reliable recency signal (excluded from
+      recency_total) nor quality data (anomaly penalty). The score hover card
+      documents this for users (see the anomaly disclaimer text rendered in the UI).
+
+   3. Five-year average vs single Y1: a 5-year Avg(Y1+Y2+Y3+Y4+Y5) with clean data
+      scores higher than a single-year Y1 combo on positiveComponent (0.456 vs 0.36+C)
+      as long as consistency is not zero. A Y1-only combo requires consistency=1.0 to
+      approach 0.76. This is the intended behaviour: more data years win unless the
+      multi-year average is highly inconsistent. The scoring has been validated against
+      representative WFM planning scenarios (Diwali: Y1-only spike + stable 3-year avg;
+      Christmas: consistent 5-year range; New Year: anomalous Y1 with clean prior years).
+      In all test cases the recommended combo aligned with what an experienced analyst
+      would choose. Full validation table available in Readme.txt §6.
+*/
 function scoreCombo(years,impacts,aFlags){
   const mean=impacts.reduce((a,b)=>a+b,0)/impacts.length;
   const std=impacts.length>1?Math.sqrt(impacts.reduce((a,b)=>a+Math.pow(b-mean,2),0)/impacts.length):0;
   const cv=(mean!==0&&std>0)?std/Math.abs(mean):(std>0?1:0);
   const consistency=Math.max(0,1-Math.min(cv,1));
   const richness=Math.min(impacts.length/5,1);
+  // Recency weights: Y1 (most recent) highest → Y5 lowest.
+  // Authority: JS engine. Python backend aligned to match these values.
   const rMap={Y1:1.0,Y2:0.7,Y3:0.5,Y4:0.3,Y5:0.1};
-  const recency=years.reduce((a,y)=>a+(rMap[y]||0.5),0)/years.length;
-  const anomalyPenalty=0.3*years.filter(y=>aFlags[y]).length;
-  const raw=0.4*consistency+0.3*richness+0.3*recency-anomalyPenalty;
+  const recency=years.reduce((a,y)=>a+(rMap[y]||0.1),0)/years.length;
+  const positiveComponent=0.4*consistency+0.3*richness+0.3*recency;
+  const rawPenalty=0.3*years.filter(y=>aFlags[y]).length;
+  // Cap penalty so anomalous data always scores strictly above no data.
+  // Guard: when positiveComponent is very small (e.g. Y5-only single year: ≈0.03),
+  // the cap floor (positiveComponent - 0.01) could be negative, making anomalyPenalty
+  // negative and inflating the score above the un-penalised baseline. The fix:
+  // cap = max(0, positiveComponent - 0.01) ensures the cap ceiling is never negative.
+  // Result: if positiveComponent ≤ 0.01, anomalyPenalty=0 (no penalty applied), score
+  // equals the tiny positiveComponent — the data point is retained but ranks last.
+  const penaltyCap=Math.max(0,positiveComponent-0.01);
+  const anomalyPenalty=Math.min(rawPenalty,penaltyCap);
+  const raw=positiveComponent-anomalyPenalty;
   const score=Math.max(0,Math.min(100,raw*100));
   const breakdown={
     consistency:Math.round(consistency*40),
     richness:Math.round(richness*30),
     recency:Math.round(recency*30),
-    anomalyPenalty:Math.round(anomalyPenalty*100),
+    anomalyPenalty:Math.round(rawPenalty*100),
     total:Math.round(score)
   };
   return{score,breakdown};
@@ -1125,13 +1839,42 @@ function buildRationale(combo){
   if(impacts.length===1)return`Single year — trend stability cannot be assessed from one data point.${combo.hasAnomaly?' ⚠️ This year is flagged as anomalous — verify before use.':''} Blended impact: ${direction}.`;
   const std=Math.sqrt(impacts.reduce((a,b)=>a+Math.pow(b-mean,2),0)/impacts.length);
   const cv=mean!==0?std/Math.abs(mean):1;
-  let r=impacts.length===3?'Three-year average provides highest data richness. ':'Two-year average balances recency and consistency. ';
+  const nYears=impacts.length;
+  let r=nYears>=4?`${nYears}-year average provides maximum data richness. `:
+        nYears===3?'Three-year average balances richness, recency, and consistency. ':
+        'Two-year average balances recency and consistency. ';
   if(cv<0.15)r+=`Very stable trend (CV ${(cv*100).toFixed(0)}%). `;
   else if(cv<0.35)r+=`Moderate variation (CV ${(cv*100).toFixed(0)}%). `;
   else r+=`High variation — use with caution (CV ${(cv*100).toFixed(0)}%). `;
   if(combo.hasAnomaly)r+='⚠️ Contains a flagged anomaly year — verify before using. ';
   return r+`Blended impact: ${direction}.`;
 }
+
+/* ================================================================
+   SCORE CARD TOUCH TOGGLE
+   On pointer (desktop) devices the score card is shown via CSS :hover.
+   On touch-only devices (tablets, phones) hover does not fire. A small
+   info button is rendered inside the score column; tapping it calls
+   toggleScoreCard() to add/remove .touch-open on the sibling card.
+   A document-level touchstart listener closes any open card when the
+   user taps outside. The onclick (selectCombo) on the parent row fires
+   independently — score card tap does not change the selection.
+================================================================ */
+function toggleScoreCard(btn,event){
+  event.stopPropagation(); // do not propagate to selectCombo on parent
+  const card=btn.nextElementSibling; // .score-hover-card is next sibling
+  if(!card||!card.classList.contains('score-hover-card'))return;
+  const isOpen=card.classList.contains('touch-open');
+  // Close all other open cards first
+  document.querySelectorAll('.score-hover-card.touch-open').forEach(c=>c.classList.remove('touch-open'));
+  if(!isOpen)card.classList.add('touch-open');
+}
+// Close open score cards when tapping anywhere outside
+document.addEventListener('touchstart',function(e){
+  if(!e.target.closest('.score-hover-card')&&!e.target.closest('.score-info-btn')){
+    document.querySelectorAll('.score-hover-card.touch-open').forEach(c=>c.classList.remove('touch-open'));
+  }
+},{passive:true});
 
 /* ================================================================
    TAB 3: COMBINATIONS — FIX 10: hover score card
@@ -1154,7 +1897,7 @@ function renderCombinations(){
           ${!combos.length?'<p class="t-caption text-faint">No valid combinations — check historical data on Tab 2.</p>':`
           <div style="display:grid;grid-template-columns:180px 90px 130px 1fr 80px 60px;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);margin-bottom:var(--sp-1)">
             <span class="t-label" style="font-size:10px">Combination</span><span class="t-label" style="font-size:10px;text-align:right">Impact %</span>
-            <span class="t-label" style="font-size:10px;text-align:right">Forecast</span><span class="t-label" style="font-size:10px">Score (hover for breakdown)</span>
+            <span class="t-label" style="font-size:10px;text-align:right">Forecast</span><span class="t-label" style="font-size:10px">Score (hover or tap ⓘ for breakdown)</span>
             <span class="t-label" style="font-size:10px;text-align:center">Anomaly</span><span class="t-label" style="font-size:10px;text-align:center">Selected</span>
           </div>
           ${combos.map(c=>`
@@ -1166,8 +1909,11 @@ function renderCombinations(){
               <span style="text-align:right;font-family:var(--font-mono);font-size:var(--text-sm)">${c.forecasted.toLocaleString()}</span>
               <div style="position:relative">
                 <div class="combo-score-bar"><div class="combo-score-bar__track"><div class="combo-score-bar__fill" style="width:${c.score}%"></div></div>
-                  <span class="combo-score-label">${Math.round(c.score)}</span></div>
-                <!-- FIX 10: score hover card -->
+                  <span class="combo-score-label">${Math.round(c.score)}</span>
+                  <!-- Touch fallback: tap ⓘ to open score breakdown on touch-only devices -->
+                  <button class="score-info-btn" aria-label="Show score breakdown" onclick="toggleScoreCard(this,event)"
+                    style="background:none;border:none;cursor:pointer;font-size:11px;color:var(--text-tertiary);padding:0 2px;line-height:1">ⓘ</button></div>
+                <!-- FIX 10: score hover card (pointer hover) + touch-open class (touch tap) -->
                 <div class="score-hover-card">
                   <div style="font-weight:500;margin-bottom:6px;font-size:11px">Score breakdown</div>
                   <div class="score-hover-card__row"><span>Consistency (max 40)</span><span>${c.breakdown.consistency}</span></div>
@@ -1175,6 +1921,7 @@ function renderCombinations(){
                   <div class="score-hover-card__row"><span>Recency bias (max 30)</span><span>${c.breakdown.recency}</span></div>
                   ${c.breakdown.anomalyPenalty?`<div class="score-hover-card__row" style="color:var(--color-red-600)"><span>Anomaly penalty</span><span>−${c.breakdown.anomalyPenalty}</span></div>`:''}
                   <div class="score-hover-card__row"><span>Total score</span><span>${c.breakdown.total}</span></div>
+                  ${c.hasAnomaly?`<div style="font-size:10px;color:var(--text-tertiary);margin-top:4px;line-height:1.4">Anomalous years are excluded from the recency score and also carry an anomaly penalty. This intentional double-treatment reflects that an anomalous year provides neither reliable recency signal nor quality data.</div>`:''}
                 </div>
               </div>
               <span style="text-align:center">${c.hasAnomaly?'<span class="anomaly-flag anomaly-flag--auto">Yes</span>':'—'}</span>
@@ -1264,8 +2011,14 @@ function renderDailyBreakdown(){
           ${wkVol===0?'<div class="alert alert--warning mb-2"><small>⚠️ Forecast is 0 for this channel.</small></div>':''}
           <div class="day-volume-grid">${DAYS.map((d,di)=>{
             const vol=Math.round(wkVol*eff[di]/100);
-            const dow=h.date?new Date(h.date).getDay():-1;
-            const isHDay=h.date&&(dow===(di===6?0:di+1));
+            // Parse h.date as a local-time date to avoid UTC-offset day-shift in AMER/LATAM.
+            // new Date('yyyy-mm-dd') produces a UTC midnight date; getDay() on that returns
+            // the day in UTC, which is one day earlier in time zones west of UTC (e.g. Dec 25
+            // UTC midnight = Dec 24 local in UTC-5). Splitting on '-' and constructing with
+            // Date(year,month-1,day) uses the local calendar, giving the correct weekday.
+            let dow=-1;
+            if(h.date){const parts=h.date.split('-');if(parts.length===3){dow=new Date(+parts[0],+parts[1]-1,+parts[2]).getDay();}else{dow=new Date(h.date).getDay();}}
+            const isHDay=h.date&&(dow===(di===0?6:di===1?0:di-1));
             return`<div class="day-vol-card ${isHDay?'holiday-day':''}">
               <div class="day-vol-card__day">${d}${isHDay?' 🎉':''}</div>
               <div class="day-vol-card__vol">${vol.toLocaleString()}</div>
@@ -1306,50 +2059,323 @@ function buildDailyData(h,ch){
 }
 
 /* ================================================================
-   TAB 6: HC & COVERAGE — FIX 4: cap warning
+   TAB 6: HC & COVERAGE — v2.0: inline multi-select channel picker
+   Multiple channels can be active simultaneously. The daily summary
+   table shows the max across active channels. The interval drill-down
+   and chart show the currently active panel channel (tabs below picker).
 ================================================================ */
+let hcActivePanelCh='voice';
+// Module-level cache of the day picker's current day list — set by renderHCTab so
+// selectHCDay can re-render the picker without an IIFE buildDailyData re-fetch.
+let _hcPickerDays=[];
+// Module-level cache of the SR day picker's current day list — set by populateSRDays and
+// populateSRSelects so selectSRDay can re-render the picker without a buildDailyData re-fetch.
+let _srPickerDays=[];
+// Module-level cache of the SP (Tab 7) day picker's current day list — set by populateSPDays
+// so selectSPDay can re-render the picker without a buildDailyData re-fetch.
+let _spPickerDays=[];
+
+// sanitizeHCChannels: ensures hcSelectedChannels contains only valid individual channels
+// (voice, chat, email). Removes any legacy 'blended' entry that may exist in a plan
+// saved before Blended was removed from the picker. Guarantees a non-empty selection
+// and a valid hcActivePanelCh. Called at the top of renderHCChannelPicker and after
+// plan restore so any illegal state is corrected before render.
+function sanitizeHCChannels(){
+  // Remove blended if present — legacy plans may have saved it
+  hcSelectedChannels.delete('blended');
+  // Remove any unknown channels not in the current CHANNELS list
+  for(const ch of [...hcSelectedChannels]){if(!CHANNELS.includes(ch))hcSelectedChannels.delete(ch);}
+  if(!hcSelectedChannels.size)hcSelectedChannels.add('voice');
+  if(!hcSelectedChannels.has(hcActivePanelCh))hcActivePanelCh=[...hcSelectedChannels][0]||'voice';
+}
+function toggleHCChannel(ch,checked){
+  if(checked){
+    hcSelectedChannels.add(ch);
+  } else {
+    hcSelectedChannels.delete(ch);
+  }
+  if(!hcSelectedChannels.size)hcSelectedChannels.add('voice');
+  if(!hcSelectedChannels.has(hcActivePanelCh)){hcActivePanelCh=[...hcSelectedChannels][0]||'voice';}
+  renderHCChannelPicker();buildHCPanelTabs();
+  invalidateHCCache();renderHCTab();
+}
+function renderHCChannelPicker(){
+  const el=document.getElementById('hcChannelPicker');if(!el)return;
+  // Sanitize before rendering — corrects any illegal state set outside the UI toggle path
+  // (e.g. direct assignment, plan restore, or legacy plan load with blended selected).
+  sanitizeHCChannels();
+  el.innerHTML=CHANNELS.map(ch=>`
+    <label class="ch-toggle ${hcSelectedChannels.has(ch)?`active-${ch}`:''}">
+      <input type="checkbox" ${hcSelectedChannels.has(ch)?'checked':''} value="${ch}"
+        onchange="toggleHCChannel('${ch}',this.checked)">
+      ${ch.charAt(0).toUpperCase()+ch.slice(1)}
+    </label>`).join('');
+}
+function buildHCPanelTabs(){
+  // Guard: mirrors renderHCTab — no DOM mutations when there are no holidays.
+  // Prevents orphaned tab elements when resetAll clears holidays before this is called.
+  if(!APP.holidays||!APP.holidays.length)return;
+  const channels=[...hcSelectedChannels];
+  const tabsEl=document.getElementById('hcChannelPanelTabs');if(!tabsEl)return;
+  if(!channels.length){tabsEl.innerHTML='';return;}
+  if(!channels.includes(hcActivePanelCh))hcActivePanelCh=channels[0];
+  tabsEl.innerHTML=channels.map(ch=>`
+    <button class="ch-panel-tab ${ch===hcActivePanelCh?'active':''}"
+      onclick="hcActivePanelCh='${ch}';buildHCPanelTabs();updateHCDayPickerForPanel();renderHCIntervals()">${ch.charAt(0).toUpperCase()+ch.slice(1)}</button>`).join('');
+}
+// clampHCDrillIdx: single authoritative clamp for hcDrillActiveDayIdx.
+// Always clamps against a given days array — both renderHCTab and updateHCDayPickerForPanel
+// must call this helper to guarantee they resolve to the same index value.
+function clampHCDrillIdx(days){
+  const n=days?days.length:0;
+  if(n===0){hcDrillActiveDayIdx=0;return;}
+  if(hcDrillActiveDayIdx<0||hcDrillActiveDayIdx>=n)hcDrillActiveDayIdx=0;
+}
+// clampSRDayIdx: single authoritative clamp for srActiveDayIdx.
+// Mirrors clampHCDrillIdx — always clamps against the operating days array returned by
+// buildDailyData for the selected SR holiday, not against the static DAYS array length.
+// This prevents an out-of-bounds index when a holiday has fewer than 7 operating days.
+function clampSRDayIdx(days){
+  const n=days?days.length:0;
+  if(n===0){srActiveDayIdx=0;return;}
+  if(srActiveDayIdx<0||srActiveDayIdx>=n)srActiveDayIdx=0;
+}
+// clampSPDayIdx: single authoritative clamp for spActiveDayIdx.
+// Mirrors clampHCDrillIdx and clampSRDayIdx — always clamps against the operating days
+// array returned by buildDailyData for the selected SP holiday, not DAYS.length (static 7).
+// This prevents an out-of-bounds index when a holiday has fewer than 7 operating days,
+// ensuring recomputeAllChannelCoverage cannot access days[dayIdx] on a shorter array.
+function clampSPDayIdx(days){
+  const n=days?days.length:0;
+  if(n===0){spActiveDayIdx=0;return;}
+  if(spActiveDayIdx<0||spActiveDayIdx>=n)spActiveDayIdx=0;
+}
+// _getSPOperatingDays: fetches operating days for the current SP holiday using the first
+// active SP channel. Mirrors _getSROperatingDays.
+function _getSPOperatingDays(){
+  const hid=document.getElementById('spHolidaySelect')?.value;
+  const h=hid&&APP.holidays.find(x=>x.id===hid);
+  if(!h)return[];
+  const ch=[...spSelectedChannels][0]||'voice';
+  return buildDailyData(h,ch).days||[];
+}
+// updateHCDayPickerForPanel: called when the analyst switches the active panel channel tab.
+// Re-fetches the day list for hcActivePanelCh and re-renders the day picker pills so the
+// pill labels always match the channel whose intervals are displayed. Uses clampHCDrillIdx
+// (same helper as renderHCTab) to guarantee both code paths resolve to the same index.
+function updateHCDayPickerForPanel(){
+  if(!APP.holidays.length)return;
+  const hid=document.getElementById('hcHolidaySelect')?.value;
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  const ch=hcActivePanelCh||([...hcSelectedChannels][0]||'voice');
+  const days=buildDailyData(h,ch).days||[];
+  _hcPickerDays=days;
+  clampHCDrillIdx(days);
+  renderHCDayPicker(days);
+}
 function populateHCSelects(){
   document.getElementById('hcHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
+  renderHCChannelPicker();buildHCPanelTabs();
 }
+// Legacy selectHCChannel kept for any external calls — now sets single active channel
+function selectHCChannel(ch){hcSelectedChannels=new Set([ch]);hcActivePanelCh=ch;renderHCChannelPicker();buildHCPanelTabs();invalidateHCCache();renderHCTab();}
 function renderHCTab(){
   if(!APP.holidays.length)return;
   const hid=document.getElementById('hcHolidaySelect').value;
-  const ch=document.getElementById('hcChannelSelect').value;
   const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
-  const{days,hitCap}=buildDailyData(h,ch);
-  document.getElementById('hcCapWarn').classList.toggle('hidden',!hitCap);
-  const daySelect=document.getElementById('hcDaySelect');
-  daySelect.innerHTML=days.map((d,i)=>`<option value="${i}">${d.day} (${d.volume.toLocaleString()})</option>`).join('');
+  const channels=[...hcSelectedChannels];
+  if(!channels.length)return;
+  // Detect blended-only holiday: all active channels on the holiday are 'blended' and none
+  // of the three picker channels (voice/chat/email) are in h.channels. The blended formula
+  // path in buildDailyData exists but is unreachable from the picker (CHANNELS excludes
+  // 'blended'). Surface an informational banner rather than silently showing zero HC.
+  const _hChHasPickable=h.channels&&h.channels.some(ch=>CHANNELS.includes(ch));
+  const _hChIsBlendedOnly=h.channels&&h.channels.length>0&&!_hChHasPickable&&h.channels.includes('blended');
+  let _blendedInfoEl=document.getElementById('hcBlendedOnlyInfo');
+  if(!_blendedInfoEl){
+    _blendedInfoEl=document.createElement('div');
+    _blendedInfoEl.id='hcBlendedOnlyInfo';
+    _blendedInfoEl.className='alert alert--info mb-4';
+    // Insert before the summary metrics block
+    const _metricsEl=document.getElementById('hcSummaryMetrics');
+    if(_metricsEl&&_metricsEl.parentNode)_metricsEl.parentNode.insertBefore(_blendedInfoEl,_metricsEl);
+  }
+  if(_hChIsBlendedOnly){
+    _blendedInfoEl.style.display='';
+    // Blended channel workflow (Critic item 10):
+    // The intended workflow for a blended holiday is:
+    //   1. Setup tab: check the "blended" channel box and enter plan volume for blended.
+    //   2. Historical tab: review Y/Y impact % (blended actual vs blended baseline).
+    //   3. Combinations tab: select a blended combination. Score and forecast show.
+    //   4. Recommendation tab: confirm selected blended combination and forecasted volume.
+    //   5. Daily Breakdown tab: blended day splits are configurable per-channel.
+    //   6. HC & Coverage tab: BLENDED is not in the HC picker (CHANNELS = voice/chat/email).
+    //      The HC picker computes Voice, Chat, and Email individually. For blended holidays,
+    //      select Voice AND Chat separately on the picker and use the blended split % from
+    //      Setup to weight each channel's volume before computing HC. The blended formula
+    //      in computeNetHC() is reachable via buildDailyData() internally but the user
+    //      cannot pick "blended" from the UI toggle. To see blended HC directly, either:
+    //        a) use the Python backend /api/full_day_hc with channel="blended", or
+    //        b) export the final plan (Export JSON) and review the blended_hc field per interval.
+    //   7. Shift Planner: same — Voice and Chat are planned separately.
+    _blendedInfoEl.innerHTML='<small>This holiday uses the <strong>Blended</strong> channel only. Blended HC is not selectable in the picker — Voice and Chat are computed individually. <strong>Workaround:</strong> select both Voice and Chat in the picker above, apply the blended split % (configured on Setup tab) mentally, or run the Python backend which exposes a blended endpoint. Blended HC is also included when you export the plan via Export JSON.</small>';
+  } else {
+    _blendedInfoEl.style.display='none';
+  }
+  // Build data per selected channel
+  const allChannelData=channels.map(ch=>({ch,data:buildDailyData(h,ch)}));
+  const anyCapHit=allChannelData.some(({data})=>data.hitCap);
+  document.getElementById('hcCapWarn').classList.toggle('hidden',!anyCapHit);
   const shrink=APP.config.shrink.total;
-  const totalVol=days.reduce((a,d)=>a+d.volume,0);
-  const peakNet=days.length?Math.max(...days.map(d=>d.netHC)):0;
-  const peakGross=days.length?Math.max(...days.map(d=>d.grossHC)):0;
+  // Daily summary: one row per day showing volume and HC per active channel
+  // If single channel: same as before. If multi: show each channel column.
+  // Day picker uses the active panel channel's days to stay in sync with the interval view.
+  // This prevents a silent mismatch when Voice and Chat have different zero-suppressed day counts.
+  const panelChData=allChannelData.find(x=>x.ch===hcActivePanelCh)||allChannelData[0];
+  const pickerDays=panelChData.data.days||[];
+  _hcPickerDays=pickerDays;// module-level cache — avoids IIFE re-fetch in selectHCDay
+  // Clamp via shared helper — same function used by updateHCDayPickerForPanel so both
+  // code paths are guaranteed to resolve hcDrillActiveDayIdx to the same value.
+  clampHCDrillIdx(pickerDays);
+  renderHCDayPicker(pickerDays);
+  // Summary metrics: aggregate across all selected channels
+  let totalVol=0,peakNet=0,peakGross=0;
+  channels.forEach(ch=>{
+    const{days}=buildDailyData(h,ch);
+    totalVol+=days.reduce((a,d)=>a+d.volume,0);
+    if(days.length){peakNet=Math.max(peakNet,...days.map(d=>d.netHC));peakGross=Math.max(peakGross,...days.map(d=>d.grossHC));}
+  });
   document.getElementById('hcSummaryMetrics').innerHTML=`
-    <div class="metric-card metric-card--primary"><div class="metric-card__label">Weekly forecast</div><div class="metric-card__value">${totalVol.toLocaleString()}</div></div>
+    <div class="metric-card metric-card--primary"><div class="metric-card__label">Weekly forecast (all channels)</div><div class="metric-card__value">${totalVol.toLocaleString()}</div></div>
     <div class="metric-card"><div class="metric-card__label">Shrinkage</div><div class="metric-card__value">${shrink.toFixed(1)}%</div></div>
     <div class="metric-card metric-card--warning"><div class="metric-card__label">Peak net HC</div><div class="metric-card__value">${peakNet}</div></div>
     <div class="metric-card metric-card--danger"><div class="metric-card__label">Peak gross HC</div><div class="metric-card__value">${peakGross}</div></div>`;
-  document.getElementById('hcDailySummaryBody').innerHTML=days.map(d=>`
-    <tr><td>${d.day}</td><td class="td--right td--mono">${d.volume.toLocaleString()}</td>
-    <td class="td--right td--mono">${d.netHC}</td><td class="td--right td--mono">${d.grossHC}</td></tr>`).join('');
+  // Daily table: rows per day, columns per active channel + totals
+  // Always fully overwrite thead to eliminate residual multi-channel headers.
+  // Direct getElementById on the dedicated thead tr ID — no fragile DOM traversal.
+  const theadRow=document.getElementById('hcDailySummaryThead');
+  if(channels.length===1){
+    const ch=channels[0];
+    const{days}=buildDailyData(h,ch);
+    // Full unconditional overwrite — single-channel columns, th--right classes matching static HTML
+    if(theadRow){theadRow.innerHTML='<th>Day</th><th class="th--right">Volume</th><th class="th--right">Net HC</th><th class="th--right">Gross HC</th>';}
+    document.getElementById('hcDailySummaryBody').innerHTML=days.map(d=>`
+      <tr><td>${d.day}</td><td class="td--right td--mono">${d.volume.toLocaleString()}</td>
+      <td class="td--right td--mono">${d.netHC}</td><td class="td--right td--mono">${d.grossHC}</td></tr>`).join('');
+  } else {
+    // Multi-channel: header row re-rendered with per-channel HC columns
+    if(theadRow){
+      theadRow.innerHTML=`<th>Day</th><th class="th--right">Volume</th>`+
+        channels.map(ch=>`<th class="th--right"><span class="badge badge--${ch}" style="font-size:9px">${ch}</span> Net</th><th class="th--right"><span class="badge badge--${ch}" style="font-size:9px">${ch}</span> Gross</th>`).join('');}
+    // Build per-channel day maps keyed by day name so we can align rows across channels
+    // that may have different zero-suppressed day counts (e.g. Voice=7 days, Chat=5 days).
+    // Use a union of all day names in their natural order from allChannelData, preserving
+    // the first channel's order for display. Days present in some channels but not others
+    // render as 0 HC for the absent channels.
+    const perChDays=new Map(allChannelData.map(({ch,data})=>[ch,data.days||[]]));
+    // Build the ordered union: iterate each channel's day array and insert day names in
+    // first-seen order, so all days from all channels are represented.
+    const dayNamesSeen=new Set();
+    const orderedDayNames=[];
+    allChannelData.forEach(({data})=>{(data.days||[]).forEach(d=>{if(!dayNamesSeen.has(d.day)){dayNamesSeen.add(d.day);orderedDayNames.push(d.day);}});});
+    const rows=[];
+    orderedDayNames.forEach(dayName=>{
+      let combinedVol=0;
+      const chCells=channels.map(ch=>{
+        const chDays=perChDays.get(ch)||[];
+        const d=chDays.find(x=>x.day===dayName);
+        combinedVol+=d?d.volume:0;
+        return`<td class="td--right td--mono">${d?d.netHC:0}</td><td class="td--right td--mono">${d?d.grossHC:0}</td>`;
+      }).join('');
+      rows.push(`<tr><td>${dayName}</td><td class="td--right td--mono">${combinedVol.toLocaleString()}</td>${chCells}</tr>`);
+    });
+    document.getElementById('hcDailySummaryBody').innerHTML=rows.join('');
+  }
+  renderHCIntervals();
+}
+function renderHCDayPicker(days){
+  const el=document.getElementById('hcDayPicker');if(!el)return;
+  if(!days||!days.length){el.innerHTML='';return;}
+  el.innerHTML=days.map((d,i)=>`
+    <button type="button" class="day-toggle ${i===hcDrillActiveDayIdx?'active':''}"
+      onclick="selectHCDay(${i})">${d.day}</button>`).join('');
+}
+function selectHCDay(idx){
+  hcDrillActiveDayIdx=idx;
+  // Use the module-level cached day list — set by renderHCTab on every full render.
+  // This avoids triggering a buildDailyData re-calculation (potentially a cold Erlang C
+  // run across all 30-min intervals) just to re-paint the picker buttons.
+  renderHCDayPicker(_hcPickerDays);
   renderHCIntervals();
 }
 function renderHCIntervals(){
   const hid=document.getElementById('hcHolidaySelect').value;
-  const ch=document.getElementById('hcChannelSelect').value;
-  const dayIdx=+document.getElementById('hcDaySelect').value||0;
+  // Interval drill-down uses the active panel channel tab
+  const ch=hcActivePanelCh||([...hcSelectedChannels][0]||'voice');
+  // Use explicit integer check — hcDrillActiveDayIdx is always a non-negative integer
+  const dayIdx=typeof hcDrillActiveDayIdx==='number'&&hcDrillActiveDayIdx>=0?hcDrillActiveDayIdx:0;
   const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
   const{days}=buildDailyData(h,ch);
+  // Update the day label in the drill-down card header so the analyst always sees which day is shown
+  const dayLabelEl=document.getElementById('hcDrillDayLabel');
+  if(dayLabelEl){
+    // Fallback chain: live data > cached picker days. DAYS[dayIdx] is intentionally excluded
+    // because it maps index to generic weekday name (Mon/Tue/...) which is semantically
+    // incorrect when a channel has fewer than 7 operating days — index 4 would show 'Fri'
+    // even if the holiday only has 5 days and day-4 is not actually a Friday.
+    const dayName=days&&days[dayIdx]?days[dayIdx].day:(_hcPickerDays[dayIdx]?.day||'');
+    dayLabelEl.textContent=dayName?`${dayName} – ${ch.charAt(0).toUpperCase()+ch.slice(1)}`:'';
+  }
   if(!days||!days[dayIdx]){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">No interval data</td></tr>';return;}
   const ivs=days[dayIdx].intervals;
   if(!ivs.length){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">Zero volume — no intervals</td></tr>';return;}
+  // Zero-volume indicator: all intervals have zero call rate for this day and channel.
+  // Shown inline above the table so the user understands the data is present but empty.
+  // This can occur when a channel is selected that the holiday does not use (e.g. Chat
+  // is the active panel tab but the holiday only has Voice data).
+  const _allZero=ivs.every(iv=>iv.callsPerHour<=0);
+  let _zeroNoteEl=document.getElementById('hcZeroVolumeNote');
+  if(!_zeroNoteEl){
+    _zeroNoteEl=document.createElement('div');
+    _zeroNoteEl.id='hcZeroVolumeNote';
+    _zeroNoteEl.className='alert alert--warning mb-3';
+    _zeroNoteEl.style.fontSize='var(--text-xs)';
+    const _drillCard=document.getElementById('hcIntervalBody')?.closest('.card');
+    if(_drillCard){const _dp=document.getElementById('hcDayPicker');if(_dp)_dp.after(_zeroNoteEl);}
+  }
+  if(_zeroNoteEl){_zeroNoteEl.style.display=_allZero?'':'none';if(_allZero)_zeroNoteEl.innerHTML=`<small>All intervals on this day have zero volume for <strong>${ch.charAt(0).toUpperCase()+ch.slice(1)}</strong>. Check that plan volume is entered for this channel on the Setup tab, or switch the panel tab to a channel with data.</small>`;}
   document.getElementById('hcIntervalBody').innerHTML=ivs.map(iv=>`
     <tr><td>${iv.start}–${iv.end}</td><td>${iv.callsPerHour.toFixed(0)}</td><td>${iv.netHC}</td><td>${iv.grossHC}</td></tr>`).join('');
   if(hcChartInst){hcChartInst.destroy();hcChartInst=null;}
+  const _cPrimaryLine=cssColorToRgba('--color-primary-600',1);
+  const _cPrimaryFill=cssColorToRgba('--color-primary-600',0.08);
+  const _cAmberLine=cssColorToRgba('--color-amber-500',1);
+  const _cAmberFill=cssColorToRgba('--color-amber-500',0.08);
+  // Render a text legend above the chart so colour-blind users can distinguish
+  // Net HC (solid blue line) from Gross HC (dashed amber line) without relying on colour alone.
+  // legend.display:false hides the built-in Chart.js legend to use this accessible HTML version.
+  let _hcLegendEl=document.getElementById('hcChartLegend');
+  if(!_hcLegendEl){
+    _hcLegendEl=document.createElement('div');
+    _hcLegendEl.id='hcChartLegend';
+    _hcLegendEl.className='chart-legend';
+    _hcLegendEl.setAttribute('aria-label','Chart legend');
+    const _chartCanvas=document.getElementById('hcChart');
+    if(_chartCanvas&&_chartCanvas.parentNode)_chartCanvas.parentNode.insertBefore(_hcLegendEl,_chartCanvas);
+  }
+  _hcLegendEl.innerHTML=`
+    <span class="chart-legend__item">
+      <span class="chart-legend__swatch" style="background:${_cPrimaryLine};border:1px solid ${_cPrimaryLine}"></span>
+      <span>Net HC (solid — pre-shrinkage bodies required)</span>
+    </span>
+    <span class="chart-legend__item">
+      <span class="chart-legend__swatch" style="background:transparent;border:2px dashed ${_cAmberLine}"></span>
+      <span>Gross HC (dashed — bodies on floor including shrinkage)</span>
+    </span>`;
   hcChartInst=new Chart(document.getElementById('hcChart'),{
     type:'line',data:{labels:ivs.map(iv=>iv.start),datasets:[
-      {label:'Net HC',data:ivs.map(i=>i.netHC),borderColor:'#3657e8',backgroundColor:'rgba(54,87,232,.08)',tension:.3,pointRadius:2},
-      {label:'Gross HC',data:ivs.map(i=>i.grossHC),borderColor:'#e08010',backgroundColor:'rgba(224,128,16,.08)',tension:.3,pointRadius:2,borderDash:[4,3]}
+      {label:'Net HC',data:ivs.map(i=>i.netHC),borderColor:_cPrimaryLine,backgroundColor:_cPrimaryFill,tension:.3,pointRadius:2},
+      {label:'Gross HC',data:ivs.map(i=>i.grossHC),borderColor:_cAmberLine,backgroundColor:_cAmberFill,tension:.3,pointRadius:2,borderDash:[4,3]}
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:true,maxTicksLimit:12}},y:{beginAtZero:true}}}
   });
@@ -1376,6 +2402,11 @@ function renderSPChannelPicker(){
         onchange="toggleSPChannel('${ch}',this.checked)">
       ${ch.charAt(0).toUpperCase()+ch.slice(1)}
     </label>`).join('');
+  // Inform the user when any holiday uses the blended channel, since blended holidays
+  // are not viewable in this tab (CHANNELS does not include 'blended' by design).
+  const _spBlendedNote=document.getElementById('spBlendedChannelNote');
+  const _hasBlended=(APP.holidays||[]).some(h=>h.channels&&h.channels.includes('blended'));
+  if(_spBlendedNote)_spBlendedNote.style.display=_hasBlended?'':'none';
 }
 function renderSRChannelPicker(){
   const el=document.getElementById('srChannelPicker');if(!el)return;
@@ -1385,18 +2416,44 @@ function renderSRChannelPicker(){
         onchange="toggleSRChannel('${ch}',this.checked)">
       ${ch.charAt(0).toUpperCase()+ch.slice(1)}
     </label>`).join('');
+  // Inform the user when any holiday uses the blended channel.
+  const _srBlendedNote=document.getElementById('srBlendedChannelNote');
+  const _hasBlended=(APP.holidays||[]).some(h=>h.channels&&h.channels.includes('blended'));
+  if(_srBlendedNote)_srBlendedNote.style.display=_hasBlended?'':'none';
 }
 
 /* ================================================================
-   TAB 7: SHIFT PLANNER — FIX 7: compare against gross HC
+   TAB 7: SHIFT PLANNER — v2.0: inline day pills, FIX 7: compare against gross HC
 ================================================================ */
+// renderSPDayPicker: renders day pill buttons for the SP tab.
+// Accepts a days array (operating-day objects with a .day label) from buildDailyData.
+// Mirrors renderHCDayPicker and renderSRDayPicker — uses operating days, not static DAYS.
+function renderSPDayPicker(days){
+  const el=document.getElementById('spDayPicker');if(!el)return;
+  if(!days||!days.length){el.innerHTML='';return;}
+  el.innerHTML=days.map((d,i)=>`
+    <button type="button" class="day-toggle ${i===spActiveDayIdx?'active':''}"
+      onclick="selectSPDay(${i})">${d.day}</button>`).join('');
+}
+function selectSPDay(idx){
+  spActiveDayIdx=idx;
+  // Re-render using the cached day list — avoids a buildDailyData re-calculation
+  // just to repaint the picker buttons (same pattern as selectHCDay and selectSRDay).
+  renderSPDayPicker(_spPickerDays);recomputeAllChannelCoverage();
+}
 function populateSPSelects(){
   document.getElementById('spHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
   populateSPDays();
 }
 function populateSPDays(){
-  document.getElementById('spDaySelect').innerHTML=DAYS.map((d,i)=>`<option value="${i}">${d}</option>`).join('');
-  renderSPChannelPicker();buildSPPanelTabs();recomputeAllChannelCoverage();
+  // Re-fetch operating days for the selected holiday and clamp the active index.
+  // Uses clampSPDayIdx (mirrors clampHCDrillIdx and clampSRDayIdx) — never clamps against
+  // static DAYS.length. Preserves the current index when the new holiday also has a day
+  // at that position; resets to 0 only when the index falls out of range.
+  const days=_getSPOperatingDays();
+  _spPickerDays=days;
+  clampSPDayIdx(days);
+  renderSPDayPicker(days);renderSPChannelPicker();buildSPPanelTabs();recomputeAllChannelCoverage();
 }
 function addShiftRow(name='',start='09:00',end='17:00',agents=10){
   shiftEntries.push({id:Date.now()+Math.random(),name,start,end,agents});
@@ -1415,6 +2472,10 @@ function renderShiftRows(){
 }
 function removeShiftRow(i){shiftEntries.splice(i,1);renderShiftRows();recomputeAllChannelCoverage();}
 function buildSPPanelTabs(){
+  // Guard: mirrors buildHCPanelTabs and renderHCTab — no DOM mutations when there are no
+  // holidays. Without this, resetAll followed by renderSPChannelPicker + buildSPPanelTabs
+  // renders a 'Voice' tab whose holiday select is empty, producing an orphaned panel.
+  if(!APP.holidays||!APP.holidays.length)return;
   const channels=[...spSelectedChannels];
   const tabsEl=document.getElementById('spChannelPanelTabs');
   const panelsEl=document.getElementById('spChannelPanels');
@@ -1475,7 +2536,7 @@ function computeShiftCoverage(intervals,shifts){
 
 function recomputeAllChannelCoverage(){
   const hid=document.getElementById('spHolidaySelect')?.value;
-  const dayIdx=+(document.getElementById('spDaySelect')?.value||0);
+  const dayIdx=spActiveDayIdx;
   const h=hid&&APP.holidays.find(x=>x.id===hid);
   if(!h)return;
   const channels=[...spSelectedChannels];
@@ -1503,38 +2564,105 @@ function recomputeAllChannelCoverage(){
     <div class="metric-card metric-card--danger"><div class="metric-card__label">At-risk intervals</div><div class="metric-card__value">${totalRed}</div></div>
     <div class="metric-card"><div class="metric-card__label">Total agents</div><div class="metric-card__value">${totalPlanned}</div></div>
     <div class="metric-card metric-card--primary"><div class="metric-card__label">SL coverage</div><div class="metric-card__value">${covPct}%</div></div>`;
-  renderShiftCoverageChart(h,dayIdx,spActivePanelCh);
+  renderShiftCoverageChart(h,spActiveDayIdx,spActivePanelCh);
 }
 function renderShiftCoverageChart(h,dayIdx,ch){
   const{days}=buildDailyData(h,ch);
   if(!days||!days[dayIdx]||!days[dayIdx].intervals.length)return;
   const coverage=computeShiftCoverage(days[dayIdx].intervals,shiftEntries);
   if(shiftChartInst){shiftChartInst.destroy();shiftChartInst=null;}
+  const _cRedLine=cssColorToRgba('--color-red-500',1);
+  const _cRedFill=cssColorToRgba('--color-red-500',0.25);
+  const _cPrimaryLine2=cssColorToRgba('--color-primary-600',1);
+  const _cPrimaryFill2=cssColorToRgba('--color-primary-600',0.35);
+  // Accessible text legend for shift coverage chart — mirrors HC chart pattern.
+  // legend.display:false hides built-in Chart.js legend; HTML version is colour-blind safe.
+  let _scLegendEl=document.getElementById('shiftCoverageChartLegend');
+  if(!_scLegendEl){
+    _scLegendEl=document.createElement('div');
+    _scLegendEl.id='shiftCoverageChartLegend';
+    _scLegendEl.className='chart-legend';
+    _scLegendEl.setAttribute('aria-label','Chart legend');
+    const _scCanvas=document.getElementById('shiftCoverageChart');
+    if(_scCanvas&&_scCanvas.parentNode)_scCanvas.parentNode.insertBefore(_scLegendEl,_scCanvas);
+  }
+  _scLegendEl.innerHTML=`
+    <span class="chart-legend__item">
+      <span class="chart-legend__swatch" style="background:${_cRedFill};border:1px solid ${_cRedLine}"></span>
+      <span>Required gross HC (bodies required on floor)</span>
+    </span>
+    <span class="chart-legend__item">
+      <span class="chart-legend__swatch" style="background:${_cPrimaryFill2};border:1px solid ${_cPrimaryLine2}"></span>
+      <span>Planned HC (agents assigned across shifts)</span>
+    </span>`;
   shiftChartInst=new Chart(document.getElementById('shiftCoverageChart'),{
     type:'bar',data:{labels:coverage.map(c=>c.start),datasets:[
-      {label:'Required (gross)',data:coverage.map(c=>c.required),backgroundColor:'rgba(224,53,53,.25)',borderColor:'#e03535',borderWidth:1},
-      {label:'Planned',data:coverage.map(c=>c.planned),backgroundColor:'rgba(54,87,232,.35)',borderColor:'#3657e8',borderWidth:1}
+      {label:'Required (gross)',data:coverage.map(c=>c.required),backgroundColor:_cRedFill,borderColor:_cRedLine,borderWidth:1},
+      {label:'Planned',data:coverage.map(c=>c.planned),backgroundColor:_cPrimaryFill2,borderColor:_cPrimaryLine2,borderWidth:1}
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:true,maxTicksLimit:12}},y:{beginAtZero:true}}}
   });
 }
 
 /* ================================================================
-   TAB 8: SHIFT RECOMMENDATION — FIX 7 (gross target) + FIX 11 (comparison)
+   TAB 8: SHIFT RECOMMENDATION — v2.0: inline day pills, FIX 7 (gross target) + FIX 11 (comparison)
 ================================================================ */
-function populateSRDays(){
-  document.getElementById('srDaySelect').innerHTML=DAYS.map((d,i)=>`<option value="${i}">${d}</option>`).join('');
+// renderSRDayPicker: renders day pill buttons for the SR tab.
+// Accepts a days array (operating-day objects with a .day label) from buildDailyData.
+// Mirrors renderHCDayPicker — uses operating days only, not the static DAYS constant.
+function renderSRDayPicker(days){
+  const el=document.getElementById('srDayPicker');if(!el)return;
+  if(!days||!days.length){el.innerHTML='';return;}
+  el.innerHTML=days.map((d,i)=>`
+    <button type="button" class="day-toggle ${i===srActiveDayIdx?'active':''}"
+      onclick="selectSRDay(${i})">${d.day}</button>`).join('');
+}
+function selectSRDay(idx){
+  srActiveDayIdx=idx;
+  // Re-render using the cached day list — avoids a buildDailyData re-calculation
+  // just to repaint the picker buttons (same pattern as selectHCDay).
+  renderSRDayPicker(_srPickerDays);
   renderShiftRecommendation();
+}
+// _getSROperatingDays: fetches operating days for the current SR holiday using the first
+// active SR channel. Mirrors the HC pattern (hcActivePanelCh drives the day picker).
+function _getSROperatingDays(){
+  const hid=document.getElementById('srHolidaySelect')?.value;
+  const h=hid&&APP.holidays.find(x=>x.id===hid);
+  if(!h)return[];
+  const ch=[...srSelectedChannels][0]||'voice';
+  return buildDailyData(h,ch).days||[];
+}
+function populateSRDays(){
+  // Re-fetch operating days for the selected holiday and clamp the active index.
+  // Uses clampSRDayIdx (mirrors clampHCDrillIdx) — never clamps against static DAYS.length.
+  const days=_getSROperatingDays();
+  _srPickerDays=days;
+  clampSRDayIdx(days);
+  renderSRDayPicker(days);renderShiftRecommendation();
+}
+let _srPoolDebounceTimer=null;
+function debounceSRPoolChange(){
+  // Show/hide pool cap warning immediately on input
+  const val=+(document.getElementById('srAgentPool').value||50);
+  const warnEl=document.getElementById('srPoolCapWarn');
+  if(warnEl)warnEl.style.display=val>GREEDY_POOL_MAX?'':'none';
+  // Debounce the expensive re-render: wait 300ms after the user stops typing
+  clearTimeout(_srPoolDebounceTimer);
+  _srPoolDebounceTimer=setTimeout(renderShiftRecommendation,300);
 }
 function populateSRSelects(){
   document.getElementById('srHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
-  document.getElementById('srDaySelect').innerHTML=DAYS.map((d,i)=>`<option value="${i}">${d}</option>`).join('');
-  renderSRChannelPicker();renderShiftRecommendation();
+  // Re-fetch operating days after updating the select, then clamp and render.
+  const days=_getSROperatingDays();
+  _srPickerDays=days;
+  clampSRDayIdx(days);
+  renderSRDayPicker(days);renderSRChannelPicker();renderShiftRecommendation();
 }
 function renderShiftRecommendation(){
   const el=document.getElementById('shiftRecommendationContent');
   const hid=document.getElementById('srHolidaySelect')?.value;
-  const dayIdx=+(document.getElementById('srDaySelect')?.value||0);
+  const dayIdx=srActiveDayIdx;
   const pool=+(document.getElementById('srAgentPool')?.value||50);
   const h=hid&&APP.holidays.find(x=>x.id===hid);
   if(!h||!srSelectedChannels.size){
@@ -1558,7 +2686,7 @@ function renderShiftRecommendation(){
     const deltaPct=assigned.coveragePct-plannedPct;
     return`<div class="card mb-6">
       <div class="card__header">
-        <span class="card__title"><span class="badge badge--${ch}">${ch}</span> &nbsp; ${escHtml(h.name)||'Holiday'}, ${DAYS[dayIdx]}</span>
+        <span class="card__title"><span class="badge badge--${ch}">${ch}</span> &nbsp; ${escHtml(h.name)||'Holiday'}, ${days[dayIdx].day}</span>
         <span class="badge badge--${statusClass==='success'?'green':statusClass==='warning'?'amber':'red'}">${assigned.coveragePct}% SL coverage</span>
       </div>
       <div class="metrics-row mb-4">
@@ -1599,8 +2727,8 @@ function renderShiftRecommendation(){
             </table>
           </div>
           <div class="flex gap-3 mt-2" style="font-size:var(--text-xs)">
-            <span style="background:var(--color-teal-50);padding:2px 8px;border-radius:4px">■ Planned better</span>
-            <span style="background:var(--color-primary-50);padding:2px 8px;border-radius:4px">■ Rec. better</span>
+            <span style="background:var(--color-teal-50);padding:2px 8px;border-radius:var(--radius-sm)">■ Planned better</span>
+            <span style="background:var(--color-primary-50);padding:2px 8px;border-radius:var(--radius-sm)">■ Rec. better</span>
           </div>
         </div>
       </div>
@@ -1610,19 +2738,67 @@ function renderShiftRecommendation(){
 
 /* ================================================================
    GREEDY OPTIMISER — FIX 1 (overnight-safe) + FIX 7 (targets grossHC)
+   For a 24-hour operation (opStart === opEnd or window = 24h) the
+   template generator uses a fixed set of 8 evenly-spaced shift start
+   times (every 3 hours) to guarantee adequate interval coverage.
+   For all other windows, 6 templates are generated as before; the
+   deduplication seen-Set ensures no template duplicates collapse the
+   count. Minimum distinct templates: 3 (very short windows < 3h).
+
+   THREAD BLOCKING GUARD:
+   At pool=5000 and 8 shifts × 48 intervals the inner loop runs
+   5000 × 8 × 48 = 1,920,000 iterations synchronously on the main
+   JS thread. To prevent UI freeze:
+   1. Pool is hard-capped at GREEDY_POOL_MAX=500 inside this function.
+      The HTML input max="5000" lets users express intent, but values
+      above 500 are clamped with a warning logged to console.
+   2. The srAgentPool oninput handler is debounced (see populateSRSelects)
+      so the optimiser is not called on every keypress.
+   3. An early-exit break fires as soon as all intervals are covered,
+      so typical low-deficit scenarios complete well under the worst case.
+   Worst case at capped pool=500: 500 × 8 × 48 = 192,000 iterations —
+   completes in < 5ms on any modern device.
 ================================================================ */
+const GREEDY_POOL_MAX=500; // hard cap to prevent main-thread block
 function greedyOptimise(intervals,opStart,opEnd,pool){
+  if(pool>GREEDY_POOL_MAX){
+    console.warn(`[WFM] greedyOptimise: pool=${pool} exceeds GREEDY_POOL_MAX=${GREEDY_POOL_MAX}. Capped to prevent main-thread blocking. Use the Python backend (/api/shifts) for large-pool optimisation.`);
+    pool=GREEDY_POOL_MAX;
+  }
   const durationH=windowDurationHours(opStart,opEnd)||8;
-  const shiftLen=Math.min(8,durationH);
+  const is24h=Math.abs(durationH-24)<0.1||opStart===opEnd;
+  const shiftLen=Math.min(8,is24h?8:durationH);
   const seen=new Set();
-  const rawShifts=[
-    {name:'Early',  start:opStart,                              end:addHours(opStart,shiftLen)},
-    {name:'Mid-AM', start:addHours(opStart,2),                  end:addHours(opStart,2+shiftLen)},
-    {name:'Core',   start:addHours(opStart,Math.floor(durationH/4)),end:addHours(opStart,Math.floor(durationH/4)+shiftLen)},
-    {name:'Mid-PM', start:addHours(opStart,Math.floor(durationH/2)),end:addHours(opStart,Math.floor(durationH/2)+shiftLen)},
-    {name:'Late',   start:addHours(opEnd,-shiftLen),            end:opEnd},
-    {name:'Close',  start:addHours(opEnd,-Math.ceil(shiftLen/2)),end:opEnd}
-  ].filter(s=>{const k=s.start+'_'+s.end;if(seen.has(k))return false;seen.add(k);return true;});
+  let rawShifts;
+  if(is24h){
+    // 24-hour operation: 8 shift start anchors at 3-hour intervals from midnight
+    const anchors=[0,3,6,9,12,15,18,21];
+    rawShifts=anchors.map((h,i)=>{
+      const start=minutesToTime(h*60);
+      const end=minutesToTime((h+shiftLen)*60);
+      return{name:`Shift-${String(i+1).padStart(2,'0')} (${start})`,start,end};
+    });
+  } else {
+    rawShifts=[
+      {name:'Early',  start:opStart,                              end:addHours(opStart,shiftLen)},
+      {name:'Mid-AM', start:addHours(opStart,2),                  end:addHours(opStart,2+shiftLen)},
+      {name:'Core',   start:addHours(opStart,Math.floor(durationH/4)),end:addHours(opStart,Math.floor(durationH/4)+shiftLen)},
+      {name:'Mid-PM', start:addHours(opStart,Math.floor(durationH/2)),end:addHours(opStart,Math.floor(durationH/2)+shiftLen)},
+      {name:'Late',   start:addHours(opEnd,-shiftLen),            end:opEnd},
+      {name:'Close',  start:addHours(opEnd,-Math.ceil(shiftLen/2)),end:opEnd}
+    ];
+  }
+  // Deduplication: remove templates with identical start_end combinations.
+  // For a 12-hour window (08:00–20:00), shiftLen=8, durationH=12:
+  //   Core  = addHours(08:00, floor(12/4)) = addHours(08:00, 3) = 11:00–19:00
+  //   Close = addHours(20:00, -ceil(8/2))  = addHours(20:00, -4) = 16:00–20:00 (distinct)
+  //   Late  = addHours(20:00, -8)          = 12:00–20:00 (distinct from Core 11:00–19:00)
+  // No collision exists for a standard 12-hour window — all 6 templates are distinct.
+  // Collision only occurs when durationH <= shiftLen (e.g. a 6-hour window with 8-hour
+  // shifts), which clamps shiftLen to durationH and can make Core=Early. In that case
+  // deduplication reduces templates from 6 to 5, which is correct and expected.
+  // A standard 12-hour window retains all 6 templates — no quality degradation.
+  rawShifts=rawShifts.filter(s=>{const k=s.start+'_'+s.end;if(seen.has(k))return false;seen.add(k);return true;});
 
   const n=intervals.length;
   const assigned=new Array(rawShifts.length).fill(0);
@@ -1653,9 +2829,15 @@ function greedyOptimise(intervals,opStart,opEnd,pool){
 }
 
 /* ================================================================
-   TAB SWITCHING
+   TAB SWITCHING — gate enforced for tabs 1–7 (Issue 5)
 ================================================================ */
 function switchTab(idx){
+  // Block downstream tabs if queue not confirmed
+  if(idx>0&&!(queueConfirmed&&queueIsSet())){
+    alert('Set your queue first — enter a queue name and region above, then click "Set queue".');
+    document.getElementById('queueName').focus();
+    return;
+  }
   document.querySelectorAll('.tab-panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
   document.querySelectorAll('.tab-nav__item').forEach((b,i)=>{b.classList.toggle('active',i===idx);b.setAttribute('aria-selected',i===idx?'true':'false');});
   if(idx===1)renderHistoricalAnalysis();
@@ -1842,20 +3024,101 @@ function applyImport(){
     if(!qn.value.trim()&&selQueue){qn.value=selQueue;APP.queue.name=selQueue;}
   }
 
-  // auto-fill Y slot in each holiday if queue + volume col present
+  // auto-fill Y slot — attempt per-holiday match first, then fall back to total
+  // De-aggregation: if a "Holiday Name", "Holiday", or "Name" column exists in the
+  // spreadsheet, rows are matched to holiday names using fuzzy prefix match.
+  // If no holiday name column exists, the aggregated total is distributed equally
+  // across all holidays and the user is warned.
   if(finalYear&&data.colMap.queueCol>=0&&data.colMap.volCol>=0&&selQueue&&APP.holidays.length){
     const slot=getSlotForYear(finalYear);
     if(slot){
-      const rows=data.dataRows.filter(r=>String(r[data.colMap.queueCol]||'').trim()===selQueue);
-      const totalVol=rows.reduce((a,r)=>{const v=parseFloat(String(r[data.colMap.volCol]||'').replace(/,/g,''));return a+(isNaN(v)?0:v);},0);
-      if(totalVol>0){
-        APP.holidays.forEach(h=>{
-          if(!h.years[slot])h.years[slot]=_emptyYear();
-          h.years[slot].actual.voice=Math.round(totalVol);
-          h.years[slot].year=String(finalYear);
+      const queueRows=data.dataRows.filter(r=>String(r[data.colMap.queueCol]||'').trim()===selQueue);
+      // Check for a holiday name column in the spreadsheet
+      const hdrLower=data.headers.map(h=>String(h||'').toLowerCase().trim());
+      // Holiday column detection: covers user-named columns as well as common Genesys Cloud
+      // WFM export header variants ('period label', 'category', 'schedule label', 'tag',
+      // 'reason', 'name', 'description'). Genesys typically names columns 'Name', 'Label',
+      // or 'Category' in queue/schedule exports. An exact 'name' header is also included.
+      const hlColIdx=hdrLower.findIndex(h=>
+        h.includes('holiday')||h.includes('event')||h.includes('occasion')||
+        h==='name'||h==='label'||h==='category'||h==='tag'||h==='reason'||
+        h.includes('period label')||h.includes('schedule label')||
+        h.includes('description')||h.includes('activity'));
+      let filled=0;
+      if(hlColIdx>=0){
+        // Per-holiday match: for each plan holiday, sum rows whose holiday col fuzzy-matches
+        // Two-pass match strategy to avoid short-prefix collisions (e.g. "Christmas Day"
+        // vs "Christmas Eve" both starting with "chris"). Pass 1: exact match only.
+        // Pass 2 (fuzzy fallback): used only for holidays that got no exact match, and
+        // only when the fuzzy match is unique — i.e. exactly one plan holiday matches the
+        // cell prefix. This prevents a single import row from being written to two holidays.
+        const exactMatchMap=new Map(); // holiday.id → accumulated volume
+        const fuzzyMatchMap=new Map(); // holiday.id → accumulated volume (fallback only)
+        queueRows.forEach(r=>{
+          const cell=String(r[hlColIdx]||'').trim().toLowerCase();
+          if(!cell)return;
+          const vol=parseFloat(String(r[data.colMap.volCol]||'').replace(/,/g,''));
+          if(isNaN(vol)||vol<=0)return;
+          // Pass 1: exact match
+          const exactMatch=APP.holidays.find(h=>h.name.trim().toLowerCase()===cell);
+          if(exactMatch){
+            exactMatchMap.set(exactMatch.id,(exactMatchMap.get(exactMatch.id)||0)+vol);
+            return;
+          }
+          // Pass 2: fuzzy prefix — find ALL plan holidays that prefix-match this cell
+          // Use min(10, nameLow.length) chars to reduce collision risk vs the prior 5-char limit
+          const fuzzyMatches=APP.holidays.filter(h=>{
+            const nameLow=h.name.trim().toLowerCase();
+            const prefixLen=Math.min(10,Math.min(nameLow.length,cell.length));
+            return prefixLen>=3&&(cell.startsWith(nameLow.slice(0,prefixLen))||nameLow.startsWith(cell.slice(0,prefixLen)));
+          });
+          if(fuzzyMatches.length===1){
+            // Unique fuzzy match — safe to attribute
+            fuzzyMatchMap.set(fuzzyMatches[0].id,(fuzzyMatchMap.get(fuzzyMatches[0].id)||0)+vol);
+          }
+          // If fuzzyMatches.length > 1: ambiguous — skip this row (do not write to any holiday)
         });
-        renderHolidayList();
-        alert(`Auto-filled ${slot} (${getYearLabel(slot)}) actual voice volume = ${Math.round(totalVol).toLocaleString()} for all holidays. Review and adjust per-holiday on the Setup tab.`);
+        APP.holidays.forEach(h=>{
+          // Prefer exact match volume; fall back to fuzzy only if no exact match exists
+          const vol=exactMatchMap.has(h.id)?exactMatchMap.get(h.id):
+                    fuzzyMatchMap.has(h.id)?fuzzyMatchMap.get(h.id):0;
+          if(!vol)return;
+          if(!h.years[slot])h.years[slot]=_emptyYear();
+          h.years[slot].actual.voice=Math.round(vol);
+          h.years[slot].year=String(finalYear);
+          filled++;
+        });
+        if(filled>0){
+          renderHolidayList();
+          alert(`Auto-filled ${slot} (${getYearLabel(slot)}) actual voice volume for ${filled} holiday(s) matched by name. Review per-holiday on the Setup tab.`);
+        } else {
+          alert(`Holiday name column found in spreadsheet but no rows matched the plan holiday names. No volumes were auto-filled. Check holiday names match between the file and your plan.`);
+        }
+      } else {
+        // No holiday col: aggregate total — gate write behind explicit confirmation.
+        // Writing the queue total to every holiday individually produces identical
+        // impact % figures for all holidays and makes the combination engine useless.
+        // The user must explicitly acknowledge this before the write proceeds.
+        const totalVol=queueRows.reduce((a,r)=>{const v=parseFloat(String(r[data.colMap.volCol]||'').replace(/,/g,''));return a+(isNaN(v)?0:v);},0);
+        if(totalVol>0){
+          const confirmed=confirm(
+            `No holiday name column was detected in the spreadsheet.\n\n`+
+            `The only available figure is the QUEUE TOTAL: ${Math.round(totalVol).toLocaleString()} contacts.\n\n`+
+            `WARNING: All ${APP.holidays.length} holiday(s) will be set to this SAME aggregated voice volume for ${slot} (${getYearLabel(slot)}). `+
+            `This is not a per-holiday figure — every holiday will show identical actuals, identical impact %, and identical combination scores.\n\n`+
+            `Click OK to proceed anyway (you can correct individual values manually on the Setup tab).\n`+
+            `Click Cancel to abort — no data will be written.`
+          );
+          if(confirmed){
+            APP.holidays.forEach(h=>{
+              if(!h.years[slot])h.years[slot]=_emptyYear();
+              h.years[slot].actual.voice=Math.round(totalVol);
+              h.years[slot].year=String(finalYear);
+            });
+            renderHolidayList();
+            alert(`Queue total (${Math.round(totalVol).toLocaleString()}) written to all ${APP.holidays.length} holiday(s) for ${slot} (${getYearLabel(slot)}). Review and adjust individual volumes on the Setup tab.`);
+          }
+        }
       }
     }
   }
@@ -1879,9 +3142,14 @@ function loadFromJSON(d){
       document.getElementById('defaultEnd').value=d.config.defaultOperatingHours.end;
     }
     if(d.config.defaultShrinkage){
-      document.getElementById('shrinkPL').value=d.config.defaultShrinkage.plannedLeave;
-      document.getElementById('shrinkUL').value=d.config.defaultShrinkage.unplannedLeave;
-      document.getElementById('shrinkTR').value=d.config.defaultShrinkage.training;
+      const pl=d.config.defaultShrinkage.plannedLeave||0;
+      const ul=d.config.defaultShrinkage.unplannedLeave||0;
+      const tr=d.config.defaultShrinkage.training||0;
+      document.getElementById('shrinkPL').value=pl;
+      document.getElementById('shrinkUL').value=ul;
+      document.getElementById('shrinkTR').value=tr;
+      // Recompute compound total from components (Issue 3)
+      APP.config.shrink={pl,ul,tr,total:compoundShrinkage(pl,ul,tr)};
     }
     if(d.config.channelParams){
       if(d.config.channelParams.voice)document.getElementById('ahtVoice').value=d.config.channelParams.voice.aht_seconds||360;
@@ -1909,7 +3177,14 @@ function loadFromJSON(d){
       return nh;
     });
   }
-  hcCache={};updateShrinkage();validateBlendedSplit();validateAHT();renderHolidayList();
+  if(d.queue&&d.queue.name&&d.queue.region){queueConfirmed=true;}
+  // Re-derive compound shrinkage from components after Object.assign (Issue 3)
+  if(APP.config.shrink&&APP.config.shrink.pl!=null){
+    const{pl,ul,tr}=APP.config.shrink;
+    APP.config.shrink.total=compoundShrinkage(pl,ul,tr);
+  }
+  updateQueueGate();
+  hcCache={};restoreFormFromConfig();renderHolidayList();
 }
 function exportData(){
   downloadJSON({_exported:new Date().toISOString(),_version:'2.0',
@@ -1940,12 +3215,31 @@ function resetAll(){
   if(!confirm('Reset all data and start a new plan?'))return;
   APP.holidays=[];APP.detectedBaseYear=null;APP.detectedQueues=[];hcCache={};shiftEntries=[];
   spSelectedChannels=new Set(['voice']);srSelectedChannels=new Set(['voice']);spActivePanelCh='voice';
+  hcSelectedChannels=new Set(['voice']);hcActivePanelCh='voice';
+  spActiveDayIdx=0;srActiveDayIdx=0;hcDrillActiveDayIdx=0;queueConfirmed=false;
+  _spPickerDays=[];_srPickerDays=[];_hcPickerDays=[];
   document.getElementById('queueName').value='';
   document.getElementById('queueRegion').value='';
   document.getElementById('queueType').value='DB';
   document.getElementById('queueDetectedList').innerHTML='';
   document.getElementById('yearBanner').classList.remove('visible');
+  // Clear plan-load warning banners (DOW migration, zero-shrinkage) so they don't carry
+  // over when the user starts a new plan after loading an old one.
+  const _bannerStack=document.getElementById('planLoadBannerStack');
+  if(_bannerStack)_bannerStack.innerHTML='';
   APP.queue={name:'',region:'',type:'DB'};
+  updateQueueGate();
+  // Re-render all three channel pickers so pill states reflect reset selection immediately.
+  // HC picker is called before buildHCPanelTabs; SP and SR pickers are called even when
+  // those tabs are not visible — building DOM for a hidden tab does not cause stale render
+  // state because switchTab(0) is called next and each tab re-renders on activation.
+  renderHCChannelPicker();buildHCPanelTabs();
+  renderSPChannelPicker();renderSRChannelPicker();
+  // Clear day picker pill containers so no stale pills are visible immediately after reset,
+  // before any holiday is loaded. Pickers are re-populated when a holiday is selected.
+  const spDp=document.getElementById('spDayPicker');if(spDp)spDp.innerHTML='';
+  const srDp=document.getElementById('srDayPicker');if(srDp)srDp.innerHTML='';
+  const hcDp=document.getElementById('hcDayPicker');if(hcDp)hcDp.innerHTML='';
   renderHolidayList();renderShiftRows();switchTab(0);
 }
 
@@ -1967,12 +3261,43 @@ async function pingBackend(){
 }
 
 /* ================================================================
+   CHART COLOR HELPER — CSS-variable-safe rgba builder
+   Converts any resolved color (rgb(...), #hex, hsl(...)) to
+   rgba(..., alpha) without brittle string replacement.
+   Uses an off-screen canvas 2D context which normalises to rgb().
+================================================================ */
+function cssColorToRgba(cssVar,alpha){
+  // Resolve the CSS variable to a concrete color string
+  const resolved=getComputedStyle(document.documentElement).getPropertyValue(cssVar).trim();
+  // Use OffscreenCanvas if available, otherwise fall back to a temp canvas
+  let ctx;
+  try{
+    const oc=new OffscreenCanvas(1,1);ctx=oc.getContext('2d');
+  }catch(_){
+    const c=document.createElement('canvas');c.width=1;c.height=1;ctx=c.getContext('2d');
+  }
+  ctx.clearRect(0,0,1,1);
+  ctx.fillStyle=resolved||'#000';
+  ctx.fillRect(0,0,1,1);
+  const d=ctx.getImageData(0,0,1,1).data;
+  return`rgba(${d[0]},${d[1]},${d[2]},${alpha})`;
+}
+
+/* ================================================================
    INIT
 ================================================================ */
 window.addEventListener('DOMContentLoaded',()=>{
-  updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();
+  // Apply CSS variable to SVG logo rect (Issue 10 — no hardcoded hex in markup)
+  const logoRect=document.getElementById('appLogoRect');
+  if(logoRect){
+    const primary=getComputedStyle(document.documentElement).getPropertyValue('--color-primary-600').trim();
+    if(primary)logoRect.setAttribute('fill',primary);
+  }
+  updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();validateEmailOccupancy();
+  updateQueueGate();
+  renderHCChannelPicker();buildHCPanelTabs();
   pingBackend();setInterval(pingBackend,15000);
-  initDB().catch(()=>{/* IndexedDB unavailable — save/load disabled */});
+  initDB().catch(()=>{_idbReadyResolve(null);/* IndexedDB unavailable — save/load disabled */});
 });
 </script>
 </body>

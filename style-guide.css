@@ -18,7 +18,8 @@
    13. Charts & Data Viz
    14. Metric Summary Cards
    15. Utility Classes
-   16. Responsive Breakpoints
+   16. HC Channel Picker
+   17. Responsive Breakpoints
    ============================================================ */
 
 
@@ -164,6 +165,7 @@
   --shadow-xs:    0 1px 2px rgba(26,26,46,0.06);
   --shadow-sm:    0 1px 4px rgba(26,26,46,0.08), 0 0 0 0.5px rgba(26,26,46,0.04);
   --shadow-md:    0 4px 12px rgba(26,26,46,0.10), 0 0 0 0.5px rgba(26,26,46,0.06);
+  --shadow-xl:    0 20px 48px rgba(26,26,46,0.16), 0 4px 12px rgba(26,26,46,0.10), 0 0 0 0.5px rgba(26,26,46,0.06);
   --shadow-focus: 0 0 0 3px rgba(79, 110, 245, 0.25);
 
   /* --- Transitions --- */
@@ -1391,7 +1393,36 @@ input[type="radio"] {
 
 
 /* ============================================================
-   16. RESPONSIVE BREAKPOINTS
+   16. HC CHANNEL PICKER — Pill states
+   ============================================================ */
+
+/* Disabled channel toggle pill — available for future use if any channel must be
+   rendered non-interactively (e.g. read-only mode or unsupported channel for queue type).
+   pointer-events:none prevents interaction; opacity communicates unavailability. */
+.ch-toggle.ch-toggle--disabled {
+  opacity: .35;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Legacy rule — kept to avoid breaking any cached stylesheet references.
+   .hc-blended-note was used in a prior version for a Blended mutual-exclusion
+   inline note. The Blended option was removed from the channel picker in v2.0.
+   This rule is intentionally inert: no element with class hc-blended-note
+   is rendered by the application. */
+.hc-blended-note {
+  display: none;
+  font-size: var(--text-xs);
+  color: var(--text-tertiary);
+  margin-top: var(--sp-2);
+  line-height: var(--leading-normal);
+}
+.hc-blended-note.visible {
+  display: block;
+}
+
+/* ============================================================
+   17. RESPONSIVE BREAKPOINTS
    ============================================================ */
 
 @media (max-width: 1200px) {

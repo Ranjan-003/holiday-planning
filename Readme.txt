@@ -1,7 +1,7 @@
 ================================================================================
   HOLIDAY PLANNING TEMPLATE — WFM SCHEDULING TOOL
-  Version 1.2 | Built for Enterprise WFM Schedulers
-  Architecture last updated: 2026-06-09
+  Version 2.0 | Built for Enterprise WFM Schedulers
+  Architecture last updated: 2026-06-10
 ================================================================================
 
 OVERVIEW
@@ -9,7 +9,7 @@ OVERVIEW
 This tool helps WFM Schedulers plan staffing for holiday periods where contact
 volume drops or spikes from normal levels. It covers the full planning chain:
 
-  1. Enter historical holiday volumes (up to 3 years) across all channels
+  1. Enter historical holiday volumes (up to 5 years, Y1–Y5) across all channels
   2. Auto-calculate year-on-year impact % per holiday per channel
   3. Generate all valid trend combinations (Y1, Y2, Y3, averages, exclusions)
   4. Get a smart recommendation on which combination to use
@@ -39,7 +39,7 @@ FILES IN THIS PROJECT
                       email throughput with operating-window awareness,
                       combination scoring, and shift optimisation.
   sample_data.json    Three pre-loaded holidays (Christmas, New Year, Diwali)
-                      covering all channels with Y1/Y2/Y3 historical data.
+                      covering all channels with Y1–Y5 historical data slots.
                       Load via the "Import data" button in the app.
 
 HOW TO USE (BROWSER-ONLY MODE)
@@ -113,7 +113,11 @@ BLENDED CHANNEL
 
 COMBINATION LOGIC
 -----------------
-  The tool generates every valid combination from available years:
+  The tool generates every valid non-empty subset combination from all available
+  year slots (up to 5 years: Y1 through Y5). With 5 years populated, this produces
+  31 combinations (all subsets of size 1 to 5).
+
+  Examples with 3 years:
     Single year:    Y1 only | Y2 only | Y3 only
     Two-year avg:   Avg(Y1+Y2) | Avg(Y2+Y3) | Avg(Y1+Y3)
     Three-year avg: Avg(Y1+Y2+Y3)
@@ -124,8 +128,10 @@ COMBINATION LOGIC
   Recommendation scoring (hover any combination row on Tab 3 to see breakdown):
     Consistency  40pts  Low coefficient of variation = stable trend
     Data richness 30pts  More years = higher confidence
-    Recency bias  30pts  Y3 weighted highest (1.0), Y2 (0.5), Y1 (0.2)
-    Anomaly penalty      -30pts per anomalous year included
+    Recency bias  30pts  Y1 (most recent) weighted highest (1.0), Y2 (0.7),
+                         Y3 (0.5), Y4 (0.3), Y5 (0.1)
+    Anomaly penalty      -30pts per anomalous year included, capped so
+                         anomalous data always ranks above no data
 
 OVERNIGHT OPERATING WINDOWS
 ----------------------------
@@ -173,6 +179,17 @@ KNOWN LIMITATIONS
     manually or imported via JSON.
   - Day-of-week split defaults to flat (1/7 per day). Always provide actual
     historical intraday profiles for production planning accuracy.
+  - Blended channel HC: The HC & Coverage tab (Tab 6) and Shift Planner (Tab 7)
+    compute Voice, Chat, and Email individually. "Blended" is not a selectable
+    channel in those pickers. For blended holidays, select Voice and Chat
+    separately and weight each channel's volume by the blended split % configured
+    on the Setup tab. Alternatively, use the Python backend /api/full_day_hc with
+    channel="blended", or review blended_hc in the exported JSON plan.
+  - Simultaneous use: IndexedDB plan storage uses a composite key (queue|region).
+    Two browser tabs open on the same machine for the same queue and region share
+    this key. Clicking "Save plan" in the second tab silently overwrites the first
+    tab's data with no conflict warning (last-write-wins). For collaborative
+    planning, work in separate browsers or export/import JSON to merge changes.
 
 CONFIGURATION
 -------------
@@ -194,9 +211,10 @@ CONFIG REFERENCE (index.htm — JAVASCRIPT ENGINE block)
 
   Scoring weights (scoreCombo):
     Consistency   40 pts  (low coefficient of variation)
-    Data richness 30 pts  (number of years with data)
-    Recency bias  30 pts  (Y3=1.0, Y2=0.5, Y1=0.2 weight)
-    Anomaly       -30 pts per anomalous year included
+    Data richness 30 pts  (number of years with data, normalised to 5-year max)
+    Recency bias  30 pts  (Y1=1.0, Y2=0.7, Y3=0.5, Y4=0.3, Y5=0.1 weight)
+    Anomaly       -30 pts per anomalous year included (capped so anomalous
+                          data still ranks above no data)
 
 PYTHON BACKEND ENDPOINTS
 ------------------------
@@ -215,11 +233,11 @@ PYTHON BACKEND ENDPOINTS
     agentsForSL()            Binary-search agents needed to hit SL target
     serviceLevel()           SL% for a given agent count
     chatAgentsRequired()     Chat concurrency solver
-    emailAgentsRequired()    Email throughput solver
+    emailAgentsRequired()    Email throughput solver (returns net; API applies shrinkage)
     compoundShrinkage()      Compound shrinkage build-up
     distributeVolumeToIntervals()  Poisson interval split (overnight-aware)
-    scoreCombination()       Consistency/richness/recency/anomaly scorer
-    generateCombinations()   All valid Y1/Y2/Y3 permutations
+    scoreCombination()       Consistency/richness/recency/anomaly scorer (aligned to JS)
+    generateCombinations()   All valid Y1–Y5 subsets (2^5-1 = 31 max combinations)
     optimiseShifts()         Greedy shift packing heuristic
 
   See data_engine.py docstrings for request/response schemas.
@@ -236,8 +254,23 @@ VERSION HISTORY
         score breakdown hover card, planned vs recommended comparison,
         Safari AbortSignal fix, overnight warning on holiday cards,
         named channel toggle handlers, resetAll DOM fix
+  v2.0  5-year history (Y1–Y5) in all engines and combination matrix,
+        queue-first gate, recency weights corrected (Y1=highest, JS is authority),
+        Python backend aligned to JS scoring (weights + anomaly penalty cap),
+        combination engine extended to all-subsets over 5 slots (31 max),
+        Erlang C exponent units cross-validated JS vs Python,
+        anomaly penalty capped (anomalous data always ranks above no data),
+        grossHC Chart.js overflow cap (9999 sentinel),
+        HC chart accessible text legend (colour-blind safe),
+        shrinkage-zeroed banner on plan load,
+        DOW migration warning clarified with exact index displacement direction,
+        aggregate import write gated behind explicit user confirmation,
+        chat occupancy model difference between browser/backend documented,
+        email API shrinkage-free behaviour documented for API consumers,
+        CSS holiday-year-grid updated to 5-column auto-fit layout,
+        Readme updated to reflect 5-year capability and v2.0 scoring weights
 
 ================================================================================
   Built to WFM enterprise standards. Planner → Generator → Critic reviewed.
-  Three critique cycles. Score: Green — safe to proceed to production piloting.
+  Amber critique cycle addressed. Score target: Green.
 ================================================================================
