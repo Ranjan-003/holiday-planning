@@ -1960,9 +1960,15 @@ function renderHolidayList(resetPage){
                 oninput="setHVal('${h.id}','years.${y}.actual.${ch}',+this.value)">
             </div>`).join('');
           })()}
-          <!-- Baseline volume inputs removed from Tab 1 UI. Baseline data persists in
-               h.years[y].baseline[ch] for anomaly detection and impact % on Tab 2.
-               Baseline can be imported via CSV/XLS upload (importHolidayFile). -->
+          <label style="font-size:10px;color:var(--text-tertiary);margin-top:var(--sp-2);display:block">Baseline volume <span style="color:var(--text-tertiary);font-weight:normal;font-size:9px">(optional — uses plan vol if blank)</span></label>
+          ${(()=>{
+            const _blChs=h.channels&&h.channels.includes('blended')?[...CHANNELS,'blended']:CHANNELS;
+            return _blChs.map(ch=>`<div style="margin-bottom:4px">
+              <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
+              <input type="number" value="${(h.years[y]&&h.years[y].baseline[ch])||0}"
+                oninput="setHVal('${h.id}','years.${y}.baseline.${ch}',+this.value)">
+            </div>`).join('');
+          })()}
           <button type="button" class="dvg-toggle${anyEntered?' open':''}" id="dvg_toggle_${h.id}_${slotKey}"
             onclick="toggleDVG('${h.id}','${slotKey}')">
             <i class="dvg-toggle__arrow">&#9654;</i>
@@ -2117,14 +2123,18 @@ function renderHistoricalAnalysis(){
           <thead><tr><th>Year</th><th class="th--right">Actual</th><th class="th--right">Baseline</th><th class="th--right">Impact %</th><th class="th--center">Anomaly</th><th class="th--center">Override</th></tr></thead>
           <tbody>${YEAR_SLOTS.filter(y=>h.years[y]?.year).map(y=>{
             const act=h.years[y].actual[ch]||0,base=h.years[y].baseline[ch]||0;
-            const imp=computeImpact(act,base);
+            // When no baseline is entered, fall back to planVolume[ch] for impact% display —
+            // mirrors the generateCombinations() fallback so Tab 2 and Tab 3 show consistent numbers.
+            const planVolForFallback=h.planVolume[ch]||0;
+            const effectiveBase=base>0?base:(planVolForFallback>0?planVolForFallback:0);
+            const imp=computeImpact(act,effectiveBase);
             const isManual=h.manualAnomalyOverrides[y];
             const flagged=isManual!==undefined?isManual:(autoFlags[y]||false);
             return`<tr>
               <td><strong>${getYearLabel(y)}</strong> &nbsp;<span style="color:var(--text-tertiary);font-size:var(--text-xs)">(${h.years[y].year})</span></td>
               <td class="td--right td--mono">${act.toLocaleString()}</td>
-              <td class="td--right td--mono">${base>0?base.toLocaleString():'<span class="text-danger">0 — set baseline</span>'}</td>
-              <td class="td--right">${imp!==null?`<span class="impact-chip ${imp<0?'impact-chip--drop':imp>0?'impact-chip--spike':'impact-chip--flat'}">${imp>=0?'+':''}${imp.toFixed(1)}%</span>`:'<span class="text-faint">No baseline</span>'}</td>
+              <td class="td--right td--mono">${base>0?base.toLocaleString():`<span style="color:var(--color-amber-600);font-size:var(--text-xs)">${planVolForFallback>0?planVolForFallback.toLocaleString()+' (plan vol)':'0 — enter baseline'}</span>`}</td>
+              <td class="td--right">${imp!==null?`<span class="impact-chip ${imp<0?'impact-chip--drop':imp>0?'impact-chip--spike':'impact-chip--flat'}">${imp>=0?'+':''}${imp.toFixed(1)}%${base<=0&&planVolForFallback>0?' *':''}</span>`:'<span class="text-faint">No data</span>'}</td>
               <td class="td--center" id="anomaly_badge_${h.id}_${y}">${flagged?`<span class="anomaly-flag ${isManual!==undefined?'anomaly-flag--manual':'anomaly-flag--auto'}">${isManual!==undefined?'Manual':'Auto'}</span>`:'<span class="anomaly-flag anomaly-flag--clean">Clean</span>'}</td>
               <td class="td--center"><select style="height:28px;font-size:var(--text-xs);width:100px" onchange="setAnomalyOverride('${h.id}','${y}',this.value)">
                 <option value="auto" ${isManual===undefined?'selected':''}>Auto</option>
@@ -2134,6 +2144,9 @@ function renderHistoricalAnalysis(){
             </tr>`;}).join('')}
           </tbody>
         </table></div>
+        ${YEAR_SLOTS.filter(y=>h.years[y]?.year).some(y=>!(h.years[y].baseline[ch]||0)&&(h.planVolume[ch]||0)>0&&(h.years[y].actual[ch]||0)>0)?
+          `<div class="alert alert--info mt-2" style="font-size:var(--text-xs)"><small>* Baseline not entered for one or more years — plan volume (${(h.planVolume[ch]||0).toLocaleString()}) is used as the comparison baseline. Impact % is relative to plan volume. Enter baseline volumes on the Setup tab to use historical baselines instead.</small></div>`:''
+        }
       </div>`).join('')}
     </div>`;
   }).join('');
@@ -2155,10 +2168,23 @@ function getAllSubsets(arr){
   return result;
 }
 function generateCombinations(h,ch){
-  const avail=YEAR_SLOTS.filter(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0&&(h.years[y].baseline[ch]||0)>0);
+  // Baseline fallback: when a year slot has no baseline entered, use planVolume[ch] as
+  // the baseline so that actuals-only input still produces combinations. This supports the
+  // common WFM planning scenario where only historical actuals are available — the plan
+  // volume represents the expected "normal" week and serves as an adequate comparison point.
+  // Impact% = (actual - planVolume) / planVolume when baseline is absent.
+  // WFM domain rule: HC and FTE remain distinct; this fallback only affects impact% calculation.
+  const planVol=h.planVolume[ch]||0;
+  function _effectiveBaseline(y){
+    const b=h.years[y].baseline[ch]||0;
+    return b>0?b:planVol;
+  }
+  // Year slot is available when: year label entered, actual > 0, and an effective baseline > 0.
+  // planVol=0 with no entered baseline means _effectiveBaseline=0 → slot excluded (no division by zero).
+  const avail=YEAR_SLOTS.filter(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0&&_effectiveBaseline(y)>0);
   const aFlags={...h.autoAnomalyFlags,...h.manualAnomalyOverrides};
-  const impacts={};avail.forEach(y=>{impacts[y]=computeImpact(h.years[y].actual[ch]||0,h.years[y].baseline[ch]||0);});
-  const planVol=h.planVolume[ch]||0;const combos=[];
+  const impacts={};avail.forEach(y=>{impacts[y]=computeImpact(h.years[y].actual[ch]||0,_effectiveBaseline(y));});
+  const combos=[];
   const mkCombo=(yl)=>{
     const vi=yl.map(y=>impacts[y]).filter(v=>v!==null);if(!vi.length)return null;
     const blended=vi.reduce((a,b)=>a+b,0)/vi.length;
@@ -2354,7 +2380,14 @@ function renderCombinations(){
         return`<div class="mb-4">
           <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span>
             <span class="t-caption">Plan: ${(h.planVolume[ch]||0).toLocaleString()} · ${h.planSource}</span></div>
-          ${!combos.length?'<p class="t-caption text-faint">No valid combinations — check historical data on Tab 2.</p>':`
+          ${(()=>{if(!combos.length){
+            // Diagnose why no combinations were produced so the user can take action.
+            const hasActuals=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0);
+            const hasPlanVol=(h.planVolume[ch]||0)>0;
+            if(!hasActuals)return'<div class="alert alert--warning"><small>No '+ch+' actual volumes entered — go to Setup (Tab 1) and enter Y1 Actual volume and the calendar year for at least one year slot.</small></div>';
+            if(!hasPlanVol)return'<div class="alert alert--warning"><small>No '+ch+' plan volume entered — go to Setup (Tab 1) and enter a Plan Volume for '+ch+'. Plan volume is used as the baseline when no historical baseline is provided.</small></div>';
+            return'<div class="alert alert--warning"><small>No valid combinations — check that the calendar year field is filled in for each year slot on the Setup tab.</small></div>';
+          }return null;})()??`
           <div style="display:grid;grid-template-columns:180px 90px 130px 1fr 80px 60px;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);margin-bottom:var(--sp-1)">
             <span class="t-label" style="font-size:10px">Combination</span><span class="t-label" style="font-size:10px;text-align:right">Impact %</span>
             <span class="t-label" style="font-size:10px;text-align:right">Forecast</span><span class="t-label" style="font-size:10px">Score (hover or tap ⓘ for breakdown)</span>
@@ -2410,7 +2443,14 @@ function renderRecommendation(){
           const combos=h.combinations[ch]||generateCombinations(h,ch);
           const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
           const rec=combos.find(c=>c.recommended)||combos[0];
-          if(!sel)return`<div class="t-caption">No data for ${ch}</div>`;
+          if(!sel){
+            // No combinations — diagnose for the user
+            const hasActuals=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0);
+            const hasPlanVol=(h.planVolume[ch]||0)>0;
+            if(!hasActuals)return`<div class="alert alert--warning"><small>No ${ch} actuals — go to Tab 1 Setup and enter Y1 Actual volume.</small></div>`;
+            if(!hasPlanVol)return`<div class="alert alert--warning"><small>No ${ch} plan volume — go to Tab 1 Setup and enter a Plan Volume for ${ch}.</small></div>`;
+            return`<div class="alert alert--warning"><small>No combinations for ${ch} — check historical data and year fields on Tab 1.</small></div>`;
+          }
           return`<div>
             <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
             <div class="recommendation-card mb-3">
@@ -3688,6 +3728,88 @@ function greedyOptimise(intervals,opStart,opEnd,pool){
 }
 
 /* ================================================================
+   FORWARD-COMPATIBILITY MIGRATION GUARD
+   Ensures APP.holidays entries always conform to the current schema
+   before any downstream tab reads from them. Handles:
+     (a) holidayDowSplit: null/flat-array → per-slot per-channel object
+     (b) dailyVolumes: null/legacy flat-array slot → per-channel object
+   Called at tab switch so in-memory data created before a schema
+   change (e.g. plans loaded from JSON, plans built in an older session
+   still in memory) is silently upgraded before render.
+   Does NOT alter data that already matches the current schema.
+================================================================ */
+function migrateAppHolidays(){
+  if(!APP.holidays||!APP.holidays.length)return;
+  APP.holidays.forEach(h=>{
+    // Migrate dailyVolumes: ensure per-channel structure for all slots
+    if(!h.dailyVolumes||typeof h.dailyVolumes!=='object'){
+      h.dailyVolumes={};
+      YEAR_SLOTS.forEach(y=>{h.dailyVolumes[y.toLowerCase()]=_emptyDVSlot();});
+    } else {
+      YEAR_SLOTS.forEach(y=>{
+        const sk=y.toLowerCase();
+        h.dailyVolumes[sk]=migrateDailyVolumes(h.dailyVolumes[sk]);
+      });
+    }
+    // Migrate holidayDowSplit: ensure per-slot map with per-channel structure
+    if(!h.holidayDowSplit||typeof h.holidayDowSplit!=='object'||Array.isArray(h.holidayDowSplit)){
+      // Legacy: null or old flat array at top level — reset to per-slot null map
+      const _newSplit={};
+      YEAR_SLOTS.forEach(y=>{_newSplit[y.toLowerCase()]=null;});
+      h.holidayDowSplit=_newSplit;
+    } else {
+      YEAR_SLOTS.forEach(y=>{
+        const sk=y.toLowerCase();
+        const entry=h.holidayDowSplit[sk];
+        if(entry&&!Array.isArray(entry)&&typeof entry==='object'){
+          // New per-channel structure — validate each channel array
+          const validated={};
+          ['voice','chat','email'].forEach(ch=>{
+            const arr=entry[ch];
+            if(Array.isArray(arr)&&arr.length===7){
+              const ss=arr.reduce((a,b)=>a+(+b||0),0);
+              validated[ch]=(ss>0.1)?arr:null;
+            } else {validated[ch]=null;}
+          });
+          h.holidayDowSplit[sk]=validated;
+        } else if(Array.isArray(entry)&&entry.length===7){
+          // Legacy flat array — keep as-is (buildDailyData Case B handles it)
+          const ss=entry.reduce((a,b)=>a+(+b||0),0);
+          if(ss<=0.1)h.holidayDowSplit[sk]=null;
+        } else {
+          // null or wrong shape — normalise to null
+          h.holidayDowSplit[sk]=null;
+        }
+      });
+    }
+    // Ensure dowSplit exists with all channels — may be missing in very old plans
+    if(!h.dowSplit||typeof h.dowSplit!=='object'){
+      h.dowSplit={voice:[...DEFAULT_DOW_SPLIT],chat:[...DEFAULT_DOW_SPLIT],email:[...DEFAULT_DOW_SPLIT],blended:[...DEFAULT_DOW_SPLIT]};
+    } else {
+      CHANNELS.forEach(ch=>{
+        if(!Array.isArray(h.dowSplit[ch])||h.dowSplit[ch].length!==7){
+          h.dowSplit[ch]=[...DEFAULT_DOW_SPLIT];
+        }
+      });
+    }
+    // Ensure years object exists with full structure for all slots
+    YEAR_SLOTS.forEach(y=>{
+      if(!h.years[y])h.years[y]=_emptyYear();
+      if(typeof h.years[y].actual!=='object')h.years[y].actual={voice:0,chat:0,email:0,blended:0};
+      if(typeof h.years[y].baseline!=='object')h.years[y].baseline={voice:0,chat:0,email:0,blended:0};
+    });
+    // Ensure planVolume exists for all channels
+    if(!h.planVolume||typeof h.planVolume!=='object'){
+      h.planVolume={voice:0,chat:0,email:0,blended:0};
+    } else {
+      ['voice','chat','email','blended'].forEach(ch=>{
+        if(typeof h.planVolume[ch]!=='number'||isNaN(h.planVolume[ch]))h.planVolume[ch]=0;
+      });
+    }
+  });
+}
+
+/* ================================================================
    TAB SWITCHING — gate enforced for tabs 1–7 (Issue 5)
 ================================================================ */
 function switchTab(idx){
@@ -3697,6 +3819,9 @@ function switchTab(idx){
     document.getElementById('queueName').focus();
     return;
   }
+  // Run migration guard before any downstream render so stale schemas are upgraded silently.
+  // Cost: O(holidays * 5 slots) — negligible for typical plan sizes (< 50 holidays).
+  if(idx>0)migrateAppHolidays();
   document.querySelectorAll('.tab-panel').forEach((p,i)=>p.classList.toggle('active',i===idx));
   document.querySelectorAll('.tab-nav__item').forEach((b,i)=>{b.classList.toggle('active',i===idx);b.setAttribute('aria-selected',i===idx?'true':'false');});
   if(idx===1)renderHistoricalAnalysis();
