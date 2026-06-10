@@ -850,8 +850,8 @@ async function openLoadModal(){
     <div><strong>${escHtml(p.queueName)}</strong> &nbsp;<span class="badge badge--gray">${escHtml(p.region||'—')}</span> &nbsp;<span class="badge badge--${p.type==='DB'?'blue':'amber'}">${escHtml(p.type||'—')}</span>
     <div style="font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px">Saved ${new Date(p.savedAt).toLocaleString()}</div></div>
     <div style="display:flex;gap:var(--sp-2)">
-      <button class="btn btn--primary btn--sm" onclick="restoreQueuePlan(${JSON.stringify(p._planKey)})">Load</button>
-      <button class="btn btn--danger btn--sm" onclick="confirmDeletePlan(${JSON.stringify(p._planKey)})">Delete</button>
+      <button class="btn btn--primary btn--sm" onclick="restoreQueuePlan(${escHtml(JSON.stringify(p._planKey))})">Load</button>
+      <button class="btn btn--danger btn--sm" onclick="confirmDeletePlan(${escHtml(JSON.stringify(p._planKey))})">Delete</button>
     </div></div>`).join('');}
   document.getElementById('loadModal').classList.remove('hidden');
 }
@@ -914,6 +914,10 @@ async function restoreQueuePlan(planKey){
           if(ss<=0.1)h.holidayDowSplit[sk]=null;
         } else {h.holidayDowSplit[sk]=null;}
       });
+    }
+    // Migrate forecastOverride: default to {} for plans saved before this field was added.
+    if(!h.forecastOverride||typeof h.forecastOverride!=='object'||Array.isArray(h.forecastOverride)){
+      h.forecastOverride={};
     }
     return h;
   });
@@ -1837,6 +1841,24 @@ function setHVal(hid,path,value){
   obj[keys[keys.length-1]]=value;
   invalidateAllCaches();invalidateCombinationCache(hid);
 }
+/* setHActual: writes an actual-volume cell and auto-fills the slot year when blank.
+   Wraps setHVal so both writes fire atomically. Also updates the calendar-year input
+   in the DOM so the user sees the auto-filled value without a full re-render. */
+function setHActual(hid,slot,ch,value){
+  setHVal(hid,'years.'+slot+'.actual.'+ch,value);
+  const h=APP.holidays.find(x=>x.id===hid);
+  if(!h||!h.years||!h.years[slot])return;
+  if(!h.years[slot].year){
+    const yr=String(getYearForSlot(slot));
+    h.years[slot].year=yr;
+    // Patch the calendar-year input in the DOM without a full re-render.
+    const cardEl=document.getElementById('dvg_grid_'+hid+'_'+slot.toLowerCase());
+    if(cardEl){
+      const yearInput=cardEl.closest('.year-block')&&cardEl.closest('.year-block').querySelector('input[type="number"][placeholder="Calendar year"]');
+      if(yearInput&&!yearInput.value)yearInput.value=yr;
+    }
+  }
+}
 function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 
 /* ================================================================
@@ -1883,6 +1905,7 @@ function newHoliday(id){
     dowSplit:{voice:[...DEFAULT_DOW_SPLIT],chat:[...DEFAULT_DOW_SPLIT],email:[...DEFAULT_DOW_SPLIT],blended:[...DEFAULT_DOW_SPLIT]},
     dailyVolumes,
     holidayDowSplit,
+    forecastOverride:{},
     selectedCombos:{},combinations:{}};
 }
 
@@ -2021,7 +2044,7 @@ function renderHolidayList(resetPage){
             return _actChs.map(ch=>`<div style="margin-bottom:4px">
               <label style="font-size:9px;color:var(--ch-${ch})">${ch}</label>
               <input type="number" value="${(h.years[y]&&h.years[y].actual[ch])||0}"
-                oninput="setHVal('${h.id}','years.${y}.actual.${ch}',+this.value)">
+                oninput="setHActual('${h.id}','${y}','${ch}',+this.value)">
             </div>`).join('');
           })()}
           <label style="font-size:10px;color:var(--text-tertiary);margin-top:var(--sp-2);display:block">Baseline volume <span style="color:var(--text-tertiary);font-weight:normal;font-size:9px">(optional — uses plan vol if blank)</span></label>
@@ -2110,8 +2133,11 @@ function renderHolidayList(resetPage){
         const anyIndexOnly=CHANNELS.some(ch=>forecast[ch]&&forecast[ch].indexOnly);
         // Title suffix: note when showing index % instead of volumes
         const titleSuffix=anyIndexOnly?' — showing day-shape % (set plan volume to see projected volumes)':'';
+        // hasOverride: true when at least one forecastOverride cell exists for this holiday
+        const hasOverride=h.forecastOverride&&Object.keys(h.forecastOverride).length>0;
+        const useSuggBtn=(!anyIndexOnly&&hasOverride)?`<button class="btn btn--ghost btn--sm" style="margin-left:var(--sp-3);font-size:var(--text-xs)" onclick="useForecastSuggestion('${h.id}')">Use suggestion</button>`:'';
         return`<div class="dvg-forecast-section" id="dvg_forecast_section_${h.id}" style="display:none">
-          <div class="dvg-forecast-title">Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)${titleSuffix}</div>
+          <div class="dvg-forecast-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)"><span>Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)${titleSuffix}</span>${useSuggBtn}</div>
           <div class="dvg-forecast-section-head">
             <span></span>
             <span class="dvg-col-label dvg-col-label--voice">Voice</span>
@@ -2122,9 +2148,15 @@ function renderHolidayList(resetPage){
             <span class="dvg-forecast-label">${d}</span>
             ${CHANNELS.map(ch=>{
               const fc=forecast[ch];
-              const val=fc!==null?(fc.indexOnly?fc.values[di]:fc.values[di].toLocaleString()):'—';
-              const tip=fc&&fc.indexOnly?`Day-shape index for ${ch} on ${d} — set plan volume to see projected volume`:`Projected ${ch} volume for ${d} — weighted day-index \xd7 plan volume`;
-              return`<div class="dvg-forecast-cell" id="dvg_fc_${h.id}_${ch}_${di}" title="${tip}">${val}</div>`;
+              if(fc===null)return`<div class="dvg-forecast-cell" id="dvg_fc_${h.id}_${ch}_${di}">—</div>`;
+              if(fc.indexOnly){
+                // Index-only mode: show percentage string (not editable — no planVolume set)
+                return`<div class="dvg-forecast-cell" id="dvg_fc_${h.id}_${ch}_${di}" title="Day-shape index for ${ch} on ${d} — set plan volume to see projected volume">${fc.values[di]}</div>`;
+              }
+              // Volume mode: editable input; override class applied when user has edited this cell
+              const isOverridden=h.forecastOverride&&h.forecastOverride[ch]&&h.forecastOverride[ch][di]!=null;
+              const displayVal=isOverridden?h.forecastOverride[ch][di]:fc.values[di];
+              return`<input type="number" class="dvg-forecast-cell dvg-forecast-input${isOverridden?' dvg-forecast-override':''}" id="dvg_fc_${h.id}_${ch}_${di}" min="0" step="1" value="${displayVal}" title="Projected ${ch} volume for ${d} — edit to override" oninput="onForecastOverride('${h.id}','${ch}',${di},this.value)">`;
             }).join('')}
           </div>`).join('')}
         </div>`;
@@ -2229,7 +2261,7 @@ function renderHistoricalAnalysis(){
         // ('go back and fill in historical data') is never shown, and the table appears but conveys
         // no useful information. Requiring actual[ch] > 0 ensures the table only renders rows that
         // carry real volume data, and the warning branch fires correctly when no such rows exist.
-        const slotsWithYear=YEAR_SLOTS.filter(y=>h.years[y]?.year&&(h.years[y]?.actual?.[ch]||0)>0);
+        const slotsWithYear=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
         if(!slotsWithYear.length){
           // No year data entered at all — surface a clear setup guide rather than a blank table.
           // This is the most common new-user confusion: they enter planVolume on Tab 1 and click
@@ -2255,7 +2287,7 @@ function renderHistoricalAnalysis(){
             const isManual=h.manualAnomalyOverrides[y];
             const flagged=isManual!==undefined?isManual:(autoFlags[y]||false);
             return`<tr>
-              <td><strong>${getYearLabel(y)}</strong> &nbsp;<span style="color:var(--text-tertiary);font-size:var(--text-xs)">(${h.years[y].year})</span></td>
+              <td><strong>${getYearLabel(y)}</strong> &nbsp;<span style="color:var(--text-tertiary);font-size:var(--text-xs)">(${h.years[y].year||getYearForSlot(y)})</span></td>
               <td class="td--right td--mono">${act.toLocaleString()}</td>
               <td class="td--right td--mono">${base>0?base.toLocaleString():`<span style="color:var(--color-amber-600);font-size:var(--text-xs)">${planVolForFallback>0?planVolForFallback.toLocaleString()+' (plan vol)':'0 — enter baseline'}</span>`}</td>
               <td class="td--right">${imp!==null?`<span class="impact-chip ${imp<0?'impact-chip--drop':imp>0?'impact-chip--spike':'impact-chip--flat'}">${imp>=0?'+':''}${imp.toFixed(1)}%${base<=0&&planVolForFallback>0?' *':''}</span>`:'<span class="text-faint">No data</span>'}</td>
@@ -2305,7 +2337,7 @@ function generateCombinations(h,ch){
   }
   // Year slot is available when: year label entered, actual > 0, and an effective baseline > 0.
   // planVol=0 with no entered baseline means _effectiveBaseline=0 → slot excluded (no division by zero).
-  const avail=YEAR_SLOTS.filter(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0&&_effectiveBaseline(y)>0);
+  const avail=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0&&_effectiveBaseline(y)>0);
   const aFlags={...h.autoAnomalyFlags,...h.manualAnomalyOverrides};
   const impacts={};avail.forEach(y=>{impacts[y]=computeImpact(h.years[y].actual[ch]||0,_effectiveBaseline(y));});
   const combos=[];
@@ -2506,9 +2538,9 @@ function renderCombinations(){
             <span class="t-caption">Plan: ${(h.planVolume[ch]||0).toLocaleString()} · ${h.planSource}</span></div>
           ${(()=>{if(!combos.length){
             // Diagnose why no combinations were produced so the user can take action.
-            const hasActuals=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0);
+            const hasActuals=YEAR_SLOTS.some(y=>(h.years[y]?.actual?.[ch]||0)>0);
             const hasPlanVol=(h.planVolume[ch]||0)>0;
-            if(!hasActuals)return'<div class="alert alert--warning"><small>No '+ch+' actual volumes entered — go to Setup (Tab 1) and enter Y1 Actual volume and the calendar year for at least one year slot.</small></div>';
+            if(!hasActuals)return'<div class="alert alert--warning"><small>No '+ch+' actual volumes entered — go to Setup (Tab 1) and enter Y1 Actual volume for at least one year slot.</small></div>';
             if(!hasPlanVol)return'<div class="alert alert--warning"><small>No '+ch+' plan volume entered — go to Setup (Tab 1) and enter a Plan Volume for '+ch+'. Plan volume is used as the baseline when no historical baseline is provided.</small></div>';
             return'<div class="alert alert--warning"><small>No valid combinations — check that the calendar year field is filled in for each year slot on the Setup tab.</small></div>';
           }return null;})()??`
@@ -2569,7 +2601,7 @@ function renderRecommendation(){
           const rec=combos.find(c=>c.recommended)||combos[0];
           if(!sel){
             // No combinations — diagnose for the user
-            const hasActuals=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].actual[ch]||0)>0);
+            const hasActuals=YEAR_SLOTS.some(y=>(h.years[y]?.actual?.[ch]||0)>0);
             const hasPlanVol=(h.planVolume[ch]||0)>0;
             if(!hasActuals)return`<div class="alert alert--warning"><small>No ${ch} actuals — go to Tab 1 Setup and enter Y1 Actual volume.</small></div>`;
             if(!hasPlanVol)return`<div class="alert alert--warning"><small>No ${ch} plan volume — go to Tab 1 Setup and enter a Plan Volume for ${ch}.</small></div>`;
@@ -2962,7 +2994,7 @@ function _updateDVGForecastRow(hid,h){
     secDiv.className='dvg-forecast-section';
     secDiv.id='dvg_forecast_section_'+hid;
     secDiv.style.display='none'; // hidden until _syncForecastSectionVisibility sets it visible
-    secDiv.innerHTML=`<div class="dvg-forecast-title">Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)</div>
+    secDiv.innerHTML=`<div class="dvg-forecast-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)"><span>Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)</span></div>
 <div class="dvg-forecast-section-head">
   <span></span>
   <span class="dvg-col-label dvg-col-label--voice">Voice</span>
@@ -2970,7 +3002,7 @@ function _updateDVGForecastRow(hid,h){
   <span class="dvg-col-label dvg-col-label--email">Email</span>
 </div>`+DAYS.map((d,di)=>`<div class="dvg-forecast-row">
   <span class="dvg-forecast-label">${d}</span>
-  ${CHANNELS.map(ch=>`<div class="dvg-forecast-cell" id="dvg_fc_${hid}_${ch}_${di}" title="Projected ${ch} volume for ${d} — weighted day-index \xd7 plan volume">—</div>`).join('')}
+  ${CHANNELS.map(ch=>`<input type="number" class="dvg-forecast-cell dvg-forecast-input" id="dvg_fc_${hid}_${ch}_${di}" min="0" step="1" value="" title="Projected ${ch} volume for ${d} — weighted day-index \xd7 plan volume" oninput="onForecastOverride('${hid}','${ch}',${di},this.value)">`).join('')}
 </div>`).join('');
     // Insert after the hist-data-grid element (same relative position as the inline render)
     histGrid.insertAdjacentElement('afterend',secDiv);
@@ -2989,23 +3021,91 @@ function _updateDVGForecastRow(hid,h){
   // When indexOnly=false: values[di] is an integer — format with toLocaleString().
   const anyIndexOnly=CHANNELS.some(ch=>forecast[ch]&&forecast[ch].indexOnly);
   // Update the title in the forecast section header to reflect index-only mode
-  const titleEl=sectionEl.querySelector('.dvg-forecast-title');
+  const titleEl=sectionEl.querySelector('.dvg-forecast-title span');
   if(titleEl){
     const base='Forecast pattern (weighted day-index \xb7 Y1\xd70.40 + Y2\xd70.30 + Y3\xd70.20 + Y4\xd70.07 + Y5\xd70.03)';
     titleEl.textContent=base+(anyIndexOnly?' — showing day-shape % (set plan volume to see projected volumes)':'');
+  }
+  // Update "Use suggestion" button visibility
+  const hasOverride=h.forecastOverride&&Object.keys(h.forecastOverride).length>0;
+  let suggBtn=sectionEl.querySelector('.dvg-sugg-btn');
+  if(!anyIndexOnly&&hasOverride){
+    if(!suggBtn){
+      suggBtn=document.createElement('button');
+      suggBtn.className='btn btn--ghost btn--sm dvg-sugg-btn';
+      suggBtn.style.cssText='margin-left:var(--sp-3);font-size:var(--text-xs)';
+      suggBtn.textContent='Use suggestion';
+      suggBtn.onclick=function(){useForecastSuggestion(hid);};
+      const titleContainer=sectionEl.querySelector('.dvg-forecast-title');
+      if(titleContainer)titleContainer.appendChild(suggBtn);
+    }
+  } else if(suggBtn){
+    suggBtn.remove();
   }
   CHANNELS.forEach(ch=>{
     for(let di=0;di<7;di++){
       const cellEl=document.getElementById('dvg_fc_'+hid+'_'+ch+'_'+di);
       if(!cellEl)continue;
       const fc=forecast[ch];
-      if(fc===null){cellEl.textContent='—';continue;}
-      cellEl.textContent=fc.indexOnly?fc.values[di]:fc.values[di].toLocaleString();
+      if(fc===null){
+        if(cellEl.tagName==='INPUT'){cellEl.value='';}else{cellEl.textContent='—';}
+        continue;
+      }
+      if(fc.indexOnly){
+        // Index-only: display as text, not input
+        if(cellEl.tagName==='INPUT'){cellEl.value=fc.values[di];}else{cellEl.textContent=fc.values[di];}
+        continue;
+      }
+      // Volume mode: only update non-overridden cells (overridden cells track user input, not suggestion)
+      const isOverridden=h.forecastOverride&&h.forecastOverride[ch]&&h.forecastOverride[ch][di]!=null;
+      if(cellEl.tagName==='INPUT'){
+        if(!isOverridden){
+          cellEl.value=fc.values[di];
+          cellEl.classList.remove('dvg-forecast-override');
+        }
+        // Overridden cells: leave user value intact, keep override class
+      } else {
+        cellEl.textContent=fc.indexOnly?fc.values[di]:fc.values[di].toLocaleString();
+      }
     }
   });
 
   // Sync visibility: only show when at least one DVG panel is open
   _syncForecastSectionVisibility(hid);
+}
+
+/* onForecastOverride: called when user edits a forecast cell input.
+   Writes the override value into h.forecastOverride[ch][di] and applies the
+   dvg-forecast-override class to visually distinguish overridden cells. */
+function onForecastOverride(hid,ch,di,rawVal){
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  if(!h.forecastOverride)h.forecastOverride={};
+  if(!h.forecastOverride[ch])h.forecastOverride[ch]=new Array(7).fill(null);
+  const v=String(rawVal).trim();
+  h.forecastOverride[ch][di]=(v==='')?null:Math.max(0,+v||0);
+  // Remove channel entry if all days are null (user cleared all overrides for this channel)
+  if(h.forecastOverride[ch].every(x=>x===null))delete h.forecastOverride[ch];
+  const cellEl=document.getElementById('dvg_fc_'+hid+'_'+ch+'_'+di);
+  if(cellEl){
+    if(h.forecastOverride[ch]&&h.forecastOverride[ch][di]!=null){
+      cellEl.classList.add('dvg-forecast-override');
+    } else {
+      cellEl.classList.remove('dvg-forecast-override');
+      // Restore suggestion value
+      const fc=computeDayIndexForecast(h);
+      if(fc[ch]&&!fc[ch].indexOnly)cellEl.value=fc[ch].values[di];
+    }
+  }
+  // Update "Use suggestion" button visibility reactively
+  _updateDVGForecastRow(hid,h);
+}
+
+/* useForecastSuggestion: clears all forecastOverride entries for a holiday
+   and restores all cells to the computed suggestion. */
+function useForecastSuggestion(hid){
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  h.forecastOverride={};
+  _updateDVGForecastRow(hid,h);
 }
 
 /* ================================================================
@@ -4111,6 +4211,10 @@ function migrateAppHolidays(){
       ['voice','chat','email','blended'].forEach(ch=>{
         if(typeof h.planVolume[ch]!=='number'||isNaN(h.planVolume[ch]))h.planVolume[ch]=0;
       });
+    }
+    // Ensure forecastOverride exists — added in v2.1; absent in plans saved before this version.
+    if(!h.forecastOverride||typeof h.forecastOverride!=='object'||Array.isArray(h.forecastOverride)){
+      h.forecastOverride={};
     }
   });
 }

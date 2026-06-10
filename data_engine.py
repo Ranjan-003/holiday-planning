@@ -519,7 +519,74 @@ def _generate_combinations_legacy(
 
 
 # ================================================================
-#  7. SHIFT OPTIMISATION — GREEDY + ILP
+#  7. DAY-INDEX FORECAST
+# ================================================================
+
+# WEIGHT SYNC WARNING: these weights must match DAY_INDEX_WEIGHTS in index.htm.
+# Changing them here without updating the JS constant will cause Python-JS forecast divergence.
+# Authority: index.htm DAY_INDEX_WEIGHTS = {Y1:0.40, Y2:0.30, Y3:0.20, Y4:0.07, Y5:0.03}
+_DAY_INDEX_WEIGHTS = {"Y1": 0.40, "Y2": 0.30, "Y3": 0.20, "Y4": 0.07, "Y5": 0.03}
+
+
+def day_index_forecast(years_data: dict, plan_volume: float) -> list:
+    """
+    Weighted day-of-week index forecast.
+
+    years_data: dict mapping year slot (Y1..Y5) to a 7-element list of daily volumes.
+                Example: {"Y1": [120, 90, 150, 200, 180, 160, 100], "Y2": [...]}
+                Order: [Sat, Sun, Mon, Tue, Wed, Thu, Fri] — matches DAYS in index.htm.
+                Missing slots are skipped. Slots with all-zero volumes are skipped.
+
+    plan_volume: total weekly volume to distribute across 7 days.
+                 The returned values sum to plan_volume within float rounding (±0.01).
+
+    Returns: list of 7 floats, one per day (Sat..Fri order).
+             When all input data is zero or missing, returns [plan_volume/7]*7 (flat split).
+             Never raises; never returns NaN or Inf.
+
+    Zero-guard: if plan_volume is 0, returns [0.0]*7.
+    """
+    if plan_volume == 0:
+        return [0.0] * 7
+
+    weighted_index = [0.0] * 7
+    total_weight = 0.0
+
+    for slot, w in _DAY_INDEX_WEIGHTS.items():
+        if slot not in years_data:
+            continue
+        arr = years_data[slot]
+        if not isinstance(arr, (list, tuple)) or len(arr) != 7:
+            continue
+        week_total = sum(float(v) for v in arr if v is not None)
+        if week_total <= 0:
+            continue  # skip zero-total years — same guard as JS computeDayIndexForecast
+        for d in range(7):
+            v = float(arr[d]) if arr[d] is not None else 0.0
+            weighted_index[d] += w * (v / week_total)
+        total_weight += w
+
+    # All inputs were zero or missing — return flat split (plan_volume / 7 each)
+    if total_weight <= 0:
+        flat = plan_volume / 7.0
+        return [flat] * 7
+
+    # Normalise so weighted_index sums to 1.0 (accounts for partial year-weight coverage)
+    index_sum = sum(weighted_index)
+    if index_sum <= 0:
+        flat = plan_volume / 7.0
+        return [flat] * 7
+
+    norm_index = [v / index_sum for v in weighted_index]
+
+    # Project: each day = normalised_index[d] * plan_volume
+    projected = [norm_index[d] * plan_volume for d in range(7)]
+
+    return projected
+
+
+# ================================================================
+#  8. SHIFT OPTIMISATION — GREEDY + ILP
 # ================================================================
 
 def optimise_shifts(
@@ -617,7 +684,7 @@ def optimise_shifts(
 
 
 # ================================================================
-#  8. API ROUTES
+#  9. API ROUTES
 # ================================================================
 
 @app.route("/health", methods=["GET"])
@@ -875,7 +942,7 @@ def api_full_day_hc():
 
 
 # ================================================================
-#  9. MAIN
+#  10. MAIN
 # ================================================================
 
 if __name__ == "__main__":

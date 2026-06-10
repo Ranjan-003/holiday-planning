@@ -1422,6 +1422,54 @@ input[type="radio"] {
 }
 
 /* ============================================================
+   18. FORECAST CELL STATES
+   Editable forecast cells (dvg-forecast-input) and overridden
+   cells (dvg-forecast-override) use token-based styling only.
+   --fc-suggestion-border: border color for a suggestion-filled input.
+   --fc-override-bg:       background tint for a user-overridden input.
+   --fc-override-border:   border color for a user-overridden input.
+   ============================================================ */
+
+:root {
+  --fc-suggestion-border: var(--border-default);
+  --fc-override-bg:       var(--color-amber-50);
+  --fc-override-border:   var(--color-amber-500);
+}
+
+/* Suggestion-filled forecast input — visually matches regular inputs */
+.dvg-forecast-input {
+  background: var(--surface-card);
+  border: 1px solid var(--fc-suggestion-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  text-align: right;
+  padding: 0 var(--sp-2);
+  height: 28px;
+  width: 100%;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.dvg-forecast-input:focus {
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+/* User-overridden forecast input — amber tint distinguishes from suggestion */
+.dvg-forecast-override {
+  background: var(--fc-override-bg);
+  border-color: var(--fc-override-border);
+}
+
+.dvg-forecast-override:focus {
+  border-color: var(--fc-override-border);
+  box-shadow: 0 0 0 3px rgba(224, 128, 16, 0.20);
+}
+
+
+/* ============================================================
    17. RESPONSIVE BREAKPOINTS
    ============================================================ */
 
