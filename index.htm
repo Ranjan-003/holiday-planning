@@ -131,6 +131,14 @@
 .dvg-total{height:26px;font-size:var(--text-xs);font-family:var(--font-mono);text-align:center;padding:0 var(--sp-1);background:var(--surface-sunken);border:1px solid var(--border-subtle);border-radius:var(--radius-md);color:var(--text-secondary);display:flex;align-items:center;justify-content:center}
 /* Per-channel week totals row */
 .dvg-ch-totals{display:grid;grid-template-columns:40px 1fr 1fr 1fr;gap:var(--sp-1);margin-top:var(--sp-2);padding-top:var(--sp-2);border-top:1px solid var(--border-subtle)}
+/* Forecast pattern row — read-only, visually distinct from editable rows */
+.dvg-forecast-row{display:grid;grid-template-columns:40px 1fr 1fr 1fr;gap:var(--sp-1);align-items:center;margin-top:var(--sp-2);padding:var(--sp-2) var(--sp-1);background:var(--color-primary-50);border:1px solid var(--color-primary-100);border-radius:var(--radius-md)}
+.dvg-forecast-label{font-size:9px;color:var(--color-primary-700);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;height:26px;font-style:italic}
+.dvg-forecast-cell{height:26px;font-size:var(--text-xs);font-family:var(--font-mono);text-align:center;padding:0 var(--sp-1);background:var(--surface-card);border:1px solid var(--color-primary-100);border-radius:var(--radius-md);color:var(--color-primary-700);display:flex;align-items:center;justify-content:center;font-weight:var(--weight-semibold)}
+/* Forecast section header above the forecast rows */
+.dvg-forecast-section{margin-top:var(--sp-3);padding-top:var(--sp-2);border-top:1px dashed var(--color-primary-100)}
+.dvg-forecast-section-head{display:grid;grid-template-columns:40px 1fr 1fr 1fr;gap:var(--sp-1);margin-bottom:2px}
+.dvg-forecast-title{font-size:9px;color:var(--color-primary-600);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.04em;grid-column:1/-1;margin-bottom:var(--sp-1);font-style:italic}
 /* Volume mismatch warning */
 .dvg-mismatch-warn{background:var(--color-amber-50);border:1px solid var(--color-amber-100);border-radius:var(--radius-md);padding:var(--sp-2) var(--sp-3);font-size:var(--text-xs);color:var(--color-amber-700);margin-top:var(--sp-2);display:none}
 .dvg-mismatch-warn.visible{display:block}
@@ -672,6 +680,12 @@ const DAYS=['Sat','Sun','Mon','Tue','Wed','Thu','Fri'];
 const CHANNELS=['voice','chat','email'];
 const DEFAULT_DOW_SPLIT=[14.3,14.3,14.3,14.3,14.3,14.3,14.2];
 const YEAR_SLOTS=['Y1','Y2','Y3','Y4','Y5'];
+/* Day-index forecast weights — most-recent year carries highest weight.
+   Sum = 1.00. Applied per channel independently.
+   Authority: demand planning (not shrinkage / not Erlang C / not HC).
+   Weights chosen to give exponential recency decay: Y1 > Y2 > Y3 > Y4 > Y5.
+   These match the recency map used in scoreCombo (Y1=1.0…Y5=0.1 normalised to sum=1). */
+const DAY_INDEX_WEIGHTS={Y1:0.40,Y2:0.30,Y3:0.20,Y4:0.07,Y5:0.03};
 const REGIONS=['APJ','EMEA','AMER','LATAM'];
 const QUEUE_TYPES=['DB','OSP'];
 
@@ -737,9 +751,50 @@ function initDB(){
     const req=indexedDB.open(DB_NAME,DB_VER);
     req.onupgradeneeded=e=>{
       const d=e.target.result;
-      // Drop old single-key store if it exists (v1 → v2 migration)
-      if(d.objectStoreNames.contains(STORE))d.deleteObjectStore(STORE);
-      d.createObjectStore(STORE,{keyPath:'_planKey'});
+      const tx=e.target.transaction; // use the upgrade transaction
+      if(d.objectStoreNames.contains(STORE)){
+        // v1 → v2 migration: the v1 store used keyPath:'queueName' (a single string field).
+        // v2 uses keyPath:'_planKey' (composite 'name|region' string).
+        // Strategy: read all v1 records via the upgrade transaction cursor, reconstruct each
+        // with a _planKey field, then drop the v1 store and create the v2 store with those
+        // records. This is a best-effort migration: browsers that already upgraded to v2
+        // without this handler will have lost v1 data (no recovery possible after the fact).
+        // Browsers running this handler for the first time during the v1→v2 upgrade will
+        // have their data preserved. Fresh installs (no prior store) skip migration entirely.
+        const oldStore=tx.objectStore(STORE);
+        const savedRecords=[];
+        const cursorReq=oldStore.openCursor();
+        cursorReq.onsuccess=curEv=>{
+          const cur=curEv.target.result;
+          if(cur){
+            const rec=cur.value;
+            // Build composite key from queueName|region (region may be absent in v1 records)
+            const name=(rec.queueName||rec.name||'').trim();
+            const region=(rec.region||'').trim();
+            // Only migrate records with a non-empty name (v1 records always have queueName)
+            if(name){rec._planKey=name+'|'+region;savedRecords.push(rec);}
+            cur.continue();
+          } else {
+            // All v1 records collected — drop old store and create new v2 store
+            d.deleteObjectStore(STORE);
+            const newStore=d.createObjectStore(STORE,{keyPath:'_planKey'});
+            // Write migrated records into new store using the same upgrade transaction.
+            // Per-record try/catch so one bad record does not abort the whole migration batch.
+            // console.warn is emitted for each dropped record so data loss is traceable in
+            // browser DevTools, even though the error is non-fatal (Critic issue 3).
+            savedRecords.forEach(r=>{try{newStore.add(r);}catch(addErr){console.warn('[WFM] IndexedDB v1→v2 migration: failed to migrate record with key "'+r._planKey+'" — '+addErr.message+'. Record is not accessible in v2. Export JSON before upgrading to preserve data.');}});
+          }
+        };
+        cursorReq.onerror=()=>{
+          // Cursor failed — still drop and recreate so the store is in a valid v2 state.
+          // Migrated data may be lost but the app will remain functional.
+          if(d.objectStoreNames.contains(STORE))d.deleteObjectStore(STORE);
+          d.createObjectStore(STORE,{keyPath:'_planKey'});
+        };
+      } else {
+        // Fresh install — no prior store to migrate from
+        d.createObjectStore(STORE,{keyPath:'_planKey'});
+      }
     };
     req.onsuccess=e=>{idb=e.target.result;_idbReadyResolve(idb);res(idb);};
     req.onerror=e=>{_idbReadyResolve(null);rej(e.target.error);};
@@ -1855,6 +1910,9 @@ function renderHolidayList(resetPage){
         Show more holidays (${visibleCount} of ${totalCount} shown)
       </button>
     </div>`:'';
+  // Build HTML then assign. After assignment, sync forecast section visibility for each
+  // visible holiday (forecast sections are always rendered display:none initially and made
+  // visible only when at least one DVG panel is open — see _syncForecastSectionVisibility).
   list.innerHTML=visibleHolidays.map((h,idx)=>{
     const effectiveStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
     const effectiveEnd=h.operatingHoursOverride?h.operatingHours.end:APP.config.defaultEnd;
@@ -2036,8 +2094,48 @@ function renderHolidayList(resetPage){
         </div>`;
         }).join('')}
       </div>
+      ${(()=>{
+        /* Day-index forecast section — rendered outside the per-year-slot loop.
+           Uses computeDayIndexForecast() which applies DAY_INDEX_WEIGHTS and normalises
+           the weighted day pattern against planVolume.
+           When planVolume is set: shows projected daily volumes (integers).
+           When planVolume is 0 but daily data exists: shows normalised day-index percentages
+           (e.g. "14.3%") so the day-shape is visible before the plan volume is entered.
+           The section is initially hidden (display:none) and shown by _syncForecastSectionVisibility
+           only when at least one DVG panel is open — prevents numbers appearing without source context. */
+        const forecast=computeDayIndexForecast(h);
+        const hasForecast=CHANNELS.some(ch=>forecast[ch]!==null);
+        if(!hasForecast)return'';
+        // Determine if any channel is in indexOnly mode (plan volume not yet set)
+        const anyIndexOnly=CHANNELS.some(ch=>forecast[ch]&&forecast[ch].indexOnly);
+        // Title suffix: note when showing index % instead of volumes
+        const titleSuffix=anyIndexOnly?' — showing day-shape % (set plan volume to see projected volumes)':'';
+        return`<div class="dvg-forecast-section" id="dvg_forecast_section_${h.id}" style="display:none">
+          <div class="dvg-forecast-title">Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)${titleSuffix}</div>
+          <div class="dvg-forecast-section-head">
+            <span></span>
+            <span class="dvg-col-label dvg-col-label--voice">Voice</span>
+            <span class="dvg-col-label dvg-col-label--chat">Chat</span>
+            <span class="dvg-col-label dvg-col-label--email">Email</span>
+          </div>
+          ${DAYS.map((d,di)=>`<div class="dvg-forecast-row">
+            <span class="dvg-forecast-label">${d}</span>
+            ${CHANNELS.map(ch=>{
+              const fc=forecast[ch];
+              const val=fc!==null?(fc.indexOnly?fc.values[di]:fc.values[di].toLocaleString()):'—';
+              const tip=fc&&fc.indexOnly?`Day-shape index for ${ch} on ${d} — set plan volume to see projected volume`:`Projected ${ch} volume for ${d} — weighted day-index \xd7 plan volume`;
+              return`<div class="dvg-forecast-cell" id="dvg_fc_${h.id}_${ch}_${di}" title="${tip}">${val}</div>`;
+            }).join('')}
+          </div>`).join('')}
+        </div>`;
+      })()}
     </div>`;
   }).join('')+showMoreHTML;
+  // Sync forecast section visibility after DOM is populated.
+  // Sections are rendered hidden (display:none) and shown only when at least one DVG
+  // panel is open. Call _syncForecastSectionVisibility for each visible holiday so that
+  // holidays loaded from a plan with open panels display their forecast section correctly.
+  visibleHolidays.forEach(h=>_syncForecastSectionVisibility(h.id));
 }
 
 function addHoliday(){APP.holidays.push(newHoliday('h'+Date.now()));renderHolidayList();}
@@ -2608,6 +2706,103 @@ function toggleDVG(hid,slotKey){
   const isOpen=toggleEl.classList.contains('open');
   if(isOpen){toggleEl.classList.remove('open');gridEl.classList.remove('open');}
   else{toggleEl.classList.add('open');gridEl.classList.add('open');}
+  // After toggling this slot, update the forecast section visibility for this holiday.
+  // The forecast section is only shown when at least one DVG grid panel is open — it
+  // is a cross-year summary and only makes contextual sense when the user has expanded
+  // at least one year slot to view daily volumes. If all slots are collapsed, the section
+  // is hidden so it does not surface numbers without their source data being visible.
+  _syncForecastSectionVisibility(hid);
+}
+
+/* _syncForecastSectionVisibility: shows the forecast section for a holiday when at least one
+   DVG grid panel (.dvg-grid.open) exists within that holiday card. Hides it when all
+   year-slot panels are collapsed. Called by toggleDVG and _updateDVGForecastRow.
+   Design rationale: the forecast is a cross-year aggregate view — it is only meaningful
+   when the user can see the source daily volume inputs it derives from. */
+function _syncForecastSectionVisibility(hid){
+  const sectionEl=document.getElementById('dvg_forecast_section_'+hid);
+  if(!sectionEl)return;
+  // Find the holiday card element (parent chain up from any dvg_grid_<hid>_*)
+  // Strategy: check any open DVG grid for this holiday ID across all year slots.
+  const anyOpen=YEAR_SLOTS.some(y=>document.getElementById('dvg_grid_'+hid+'_'+y.toLowerCase())?.classList.contains('open'));
+  sectionEl.style.display=anyOpen?'':'none';
+}
+
+/* computeDayIndexForecast: weighted day-index demand planning calculation.
+   For each channel ch and day slot d (0–6):
+     weighted_index[d] = sum over years y of: weight[y] * (dailyVolume[y][d] / weeklyTotal[y])
+                         where only years with at least one non-null non-zero daily volume
+                         cell for this channel contribute.
+   The 7-element weighted_index array is then normalised so it sums to 1.0 (divide each
+   element by the grand sum). projected_volume[d] = normalised_index[d] * planVolume[ch].
+
+   When planVolume[ch] is 0 (not yet entered) but daily volume data exists, the normalised
+   index percentages are returned as strings in the format "XX.X%" rather than integers —
+   the day-shape is preserved and shown to the user even before the plan volume is set.
+   The 'indexOnly' flag on the result object is set true in this case so callers can
+   format the display appropriately.
+
+   Returns per channel: { values:[7], indexOnly:bool } | null
+   null is returned only when no year slot has any daily volume data for this channel.
+
+   WFM domain: this is a demand planning calculation. No shrinkage, no Erlang C, no HC
+   computation. HC/FTE distinction is not applicable here. planVolume is weekly contact
+   volume (not FTE or HC). */
+function computeDayIndexForecast(h){
+  const result={voice:null,chat:null,email:null};
+  CHANNELS.forEach(ch=>{
+    // Collect contributing year slots: must have at least one positive daily volume cell.
+    // Normalisation is against each year's own weekly total, not planVolume, so the index
+    // captures the day shape only. planVolume is applied at projection time.
+    const contributing=YEAR_SLOTS.filter(y=>{
+      const slotKey=y.toLowerCase();
+      const dvSlot=h.dailyVolumes&&h.dailyVolumes[slotKey];
+      if(!dvSlot)return false;
+      const arr=dvSlot[ch];
+      if(!Array.isArray(arr))return false;
+      const total=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+      return total>0;
+    });
+    if(!contributing.length){result[ch]=null;return;}
+
+    // For each contributing year, derive the 7-element day-index array (fracs summing to 1.0)
+    // then compute the weighted sum across years.
+    const weightedIndex=new Array(7).fill(0);
+    let totalWeight=0;
+    contributing.forEach(y=>{
+      const w=DAY_INDEX_WEIGHTS[y]||0;
+      if(w<=0)return;
+      const slotKey=y.toLowerCase();
+      const arr=h.dailyVolumes[slotKey][ch];
+      const weekTotal=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+      if(weekTotal<=0)return; // guard: skip zero-total years (excluded by filter above, defensive)
+      for(let d=0;d<7;d++){
+        const v=arr[d]!=null?+arr[d]:0;
+        weightedIndex[d]+=w*(v/weekTotal);
+      }
+      totalWeight+=w;
+    });
+    if(totalWeight<=0){result[ch]=null;return;}
+
+    // Normalise weightedIndex so it sums to 1.0 (accounts for partial year-weight coverage)
+    const indexSum=weightedIndex.reduce((s,v)=>s+v,0);
+    if(indexSum<=0){result[ch]=null;return;}
+    const normIndex=weightedIndex.map(v=>v/indexSum);
+
+    // Projected volume per day = normalised_index[d] * planVolume[ch]
+    // When planVolume[ch] > 0: return integer projected volumes.
+    // When planVolume[ch] = 0: plan not yet entered — return normalised index % strings
+    //   so the day-shape is visible to the user before the plan volume is set.
+    //   The 'indexOnly' flag lets callers render appropriately (e.g. "14.3%" vs "1,500").
+    const planVol=h.planVolume&&h.planVolume[ch]>0?h.planVolume[ch]:0;
+    if(planVol>0){
+      result[ch]={values:normIndex.map(idx=>Math.round(idx*planVol)),indexOnly:false};
+    } else {
+      // Show day-shape as percentages: X.X% per day. Rounds to 1 decimal.
+      result[ch]={values:normIndex.map(idx=>parseFloat((idx*100).toFixed(1))+'%'),indexOnly:true};
+    }
+  });
+  return result;
 }
 
 /* _deriveDowFracs: derives a 7-element normalised percentage array from a 7-day volume array.
@@ -2699,6 +2894,7 @@ function onDVGInput(hid,slotKey,channel,di,rawVal){
   h.holidayDowSplit[slotKey]={voice:vFracs,chat:cFracs,email:eFracs};
 
   _updateDVGMismatch(hid,slotKey,h,grandTotal);
+  _updateDVGForecastRow(hid,h);
   invalidateAllCaches();
 }
 
@@ -2726,6 +2922,90 @@ function _updateDVGMismatch(hid,slotKey,h,grandTotal){
   } else {
     warnEl.classList.remove('visible');
   }
+}
+
+/* _updateDVGForecastRow: reactively updates the forecast pattern row cells for a holiday.
+   Called by onDVGInput after any daily volume cell changes. Recomputes the day-index
+   forecast for all three channels and patches only the cell DOM elements — no full re-render.
+
+   Focus-safe first-entry path:
+   When the forecast section does not yet exist in the DOM (first daily volume entry for
+   a holiday), the section is injected directly into the card element without calling
+   renderHolidayList() — this preserves keyboard focus on the input cell that triggered
+   the change. renderHolidayList(false) is NOT called here; that call was the confirmed
+   source of focus-reset on first keystroke into any daily volume field (Critic issue 1).
+
+   Visibility: after injection or update, _syncForecastSectionVisibility() is called to
+   ensure the section is only visible when at least one DVG panel is open for this holiday.
+
+   WFM domain: demand planning only — no shrinkage, no Erlang C, no HC. */
+function _updateDVGForecastRow(hid,h){
+  const forecast=computeDayIndexForecast(h);
+  const hasForecast=CHANNELS.some(ch=>forecast[ch]!==null);
+
+  let sectionEl=document.getElementById('dvg_forecast_section_'+hid);
+  if(!sectionEl){
+    if(!hasForecast)return; // nothing to show, no section to create
+    // Inject the forecast section directly into the holiday card without a full re-render.
+    // Locate the holiday card by finding any DVG grid belonging to this holiday ID
+    // (the grid elements are siblings of the forecast section inside the same card).
+    // Walk up from the first year-slot DVG grid to the .holiday-row-card container.
+    const firstGridEl=document.getElementById('dvg_grid_'+hid+'_y1');
+    if(!firstGridEl)return; // card not in DOM yet — will be created on next renderHolidayList
+    // The hist-data-grid is the closest grid container; the card is its parent.
+    const histGrid=firstGridEl.closest('.hist-data-grid');
+    if(!histGrid)return;
+    const card=histGrid.parentElement;
+    if(!card)return;
+    // Build forecast section HTML — same structure as the inline render in renderHolidayList
+    const secDiv=document.createElement('div');
+    secDiv.className='dvg-forecast-section';
+    secDiv.id='dvg_forecast_section_'+hid;
+    secDiv.style.display='none'; // hidden until _syncForecastSectionVisibility sets it visible
+    secDiv.innerHTML=`<div class="dvg-forecast-title">Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)</div>
+<div class="dvg-forecast-section-head">
+  <span></span>
+  <span class="dvg-col-label dvg-col-label--voice">Voice</span>
+  <span class="dvg-col-label dvg-col-label--chat">Chat</span>
+  <span class="dvg-col-label dvg-col-label--email">Email</span>
+</div>`+DAYS.map((d,di)=>`<div class="dvg-forecast-row">
+  <span class="dvg-forecast-label">${d}</span>
+  ${CHANNELS.map(ch=>`<div class="dvg-forecast-cell" id="dvg_fc_${hid}_${ch}_${di}" title="Projected ${ch} volume for ${d} — weighted day-index \xd7 plan volume">—</div>`).join('')}
+</div>`).join('');
+    // Insert after the hist-data-grid element (same relative position as the inline render)
+    histGrid.insertAdjacentElement('afterend',secDiv);
+    sectionEl=secDiv;
+  }
+
+  if(!hasForecast){
+    // All channels became null (user cleared all inputs) — hide the section.
+    sectionEl.style.display='none';
+    return;
+  }
+
+  // Patch individual cell text content — no DOM tree reconstruction.
+  // forecast[ch] is { values:[7], indexOnly:bool } | null (new format from computeDayIndexForecast).
+  // When indexOnly=true: values[di] is already a formatted "XX.X%" string — render as-is.
+  // When indexOnly=false: values[di] is an integer — format with toLocaleString().
+  const anyIndexOnly=CHANNELS.some(ch=>forecast[ch]&&forecast[ch].indexOnly);
+  // Update the title in the forecast section header to reflect index-only mode
+  const titleEl=sectionEl.querySelector('.dvg-forecast-title');
+  if(titleEl){
+    const base='Forecast pattern (weighted day-index \xb7 Y1\xd70.40 + Y2\xd70.30 + Y3\xd70.20 + Y4\xd70.07 + Y5\xd70.03)';
+    titleEl.textContent=base+(anyIndexOnly?' — showing day-shape % (set plan volume to see projected volumes)':'');
+  }
+  CHANNELS.forEach(ch=>{
+    for(let di=0;di<7;di++){
+      const cellEl=document.getElementById('dvg_fc_'+hid+'_'+ch+'_'+di);
+      if(!cellEl)continue;
+      const fc=forecast[ch];
+      if(fc===null){cellEl.textContent='—';continue;}
+      cellEl.textContent=fc.indexOnly?fc.values[di]:fc.values[di].toLocaleString();
+    }
+  });
+
+  // Sync visibility: only show when at least one DVG panel is open
+  _syncForecastSectionVisibility(hid);
 }
 
 /* ================================================================
