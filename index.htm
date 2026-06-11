@@ -3089,6 +3089,9 @@ function renderDailyBreakdown(){
         // Flat-base note: shown when baseSource==='flat' and no normalWeekShape is present
         const showFlatNote=shapedInfo&&shapedInfo.baseSource==='flat'&&!(h.normalWeekShape&&Array.isArray(h.normalWeekShape[ch])&&h.normalWeekShape[ch].length===7&&h.normalWeekShape[ch].reduce((s,v)=>s+(+v||0),0)>0);
         const flatNote=showFlatNote?`<div class="alert alert--info mb-2" style="font-size:var(--text-xs)"><small>Using a flat base week — enter a typical non-holiday week on Setup to improve weekend/holiday separation.</small></div>`:'';
+        // Auto-weekend note: shown when baseSource==='auto-weekend' (historical data present but no normal week entered)
+        const showAutoWeekendNote=shapedInfo&&shapedInfo.baseSource==='auto-weekend';
+        const autoWeekendNote=showAutoWeekendNote?`<div class="alert alert--info mb-2" style="font-size:var(--text-xs)"><small>No normal week entered — estimating a weekend-aware base from your holiday week (weekends kept at their own level). Enter a typical non-holiday week on Setup for higher accuracy.</small></div>`:'';
         // Badge showing data source
         const hasHistData=_activeYearSlots().some(y=>{
           const slotKey=y.toLowerCase();
@@ -3101,7 +3104,7 @@ function renderDailyBreakdown(){
           (hasHistData?`<span class="badge badge--blue" style="font-size:10px" title="Calendar-anchored holiday multiplier model">DOW: decomposition</span>`:
           `<span class="badge badge--gray" style="font-size:10px" title="Using global day-of-week split from the controls above">DOW: global split</span>`);
         return`<div class="mb-4">
-          ${flatNote}
+          ${flatNote}${autoWeekendNote}
           <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span>
             <span class="t-caption">Weekly: <strong>${wkVol.toLocaleString()}</strong> · ${sel.combo}</span>
             ${sourceBadge}
@@ -3270,8 +3273,10 @@ function _rotateSplitToHoliday(splitArr,slotHolidayDate,targetDate){
    base + holiday-multiplier model.
 
    Algorithm:
-   1. Resolve base shape (priority: normalWeekShape[ch] > non-flat dowSplit[ch] > flat 1/7).
-      Track baseSource: 'normalWeek' | 'dowSplit' | 'flat'.
+   1. Resolve base shape (priority: normalWeekShape[ch] > non-flat dowSplit[ch] > auto-weekend > flat 1/7).
+      Track baseSource: 'normalWeek' | 'dowSplit' | 'auto-weekend' | 'flat'.
+      auto-weekend: weighted average of observed holiday-week fracs per active slot → Sat/Sun keep
+      their own observed levels; weekdays set to mean(Mon-Fri observed). Normalised to sum 1.0.
    2. Learn mult[delta] for delta in {-3..+3}:
       For each active year slot that has both dailyVolumes and a valid holidayDate:
         - c_y = _parseDateCol(holidayDate)  (0-based, Sat=0..Fri=6)
@@ -3322,10 +3327,68 @@ function computeHolidayShapedSplit(h, ch){
       }
     }
   }
-  // Priority C: flat 1/7
+  // Priority C: weekend-aware auto-base derived from historical holiday-week volumes.
+  // When neither normalWeekShape nor a non-flat dowSplit is available, build a base that
+  // preserves weekend (Sat/Sun) vs weekday distinction from the actual observed data rather
+  // than assuming every day is equal.  Algorithm:
+  //   1. Gather active year slots that have positive daily volumes for this channel.
+  //   2. Compute each slot's normalised 7-fraction array and accumulate a DAY_INDEX_WEIGHTS-
+  //      weighted sum → aggFrac[0..6] (Sat-first, matches DAYS column order).
+  //   3. Set base[0]=aggFrac[Sat], base[1]=aggFrac[Sun]; set base[2..6]=mean(aggFrac[2..6]).
+  //      This retains the real weekend level while smoothing weekday variation.
+  //   4. Guard: if weekdayLevel==0, fall to flat 1/7.
+  //   5. Normalise base to sum 1.0.
+  // If no slot has positive volumes for this channel, fall through to flat 1/7.
   if(!base){
-    base=new Array(7).fill(1/7);
-    baseSource='flat';
+    const autoSlots=_activeYearSlots().filter(y=>{
+      const slotKey=y.toLowerCase();
+      const dvSlot=h.dailyVolumes&&h.dailyVolumes[slotKey];
+      if(!dvSlot)return false;
+      const arr=dvSlot[ch];
+      if(!Array.isArray(arr))return false;
+      const total=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+      return total>0;
+    });
+    if(autoSlots.length>0){
+      const aggFrac=new Array(7).fill(0);
+      let aggWgtTotal=0;
+      autoSlots.forEach(y=>{
+        const w=DAY_INDEX_WEIGHTS[y]||0;
+        if(w<=0)return;
+        const slotKey=y.toLowerCase();
+        const arr=h.dailyVolumes[slotKey][ch];
+        const weekTotal=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+        if(weekTotal<=0)return;
+        for(let d=0;d<7;d++){
+          const rv=arr[d]!=null?+arr[d]:0;
+          aggFrac[d]+=w*(rv/weekTotal);
+        }
+        aggWgtTotal+=w;
+      });
+      if(aggWgtTotal>0){
+        // Normalise to produce a proper fraction array summing to 1.0
+        for(let d=0;d<7;d++)aggFrac[d]/=aggWgtTotal;
+        // Weekend level: Sat (index 0) and Sun (index 1) keep their observed averages.
+        // Weekday level: mean of Mon-Fri (indices 2-6) to suppress within-week noise.
+        const weekdayLevel=(aggFrac[2]+aggFrac[3]+aggFrac[4]+aggFrac[5]+aggFrac[6])/5;
+        if(weekdayLevel>0){
+          const autoBase=new Array(7);
+          autoBase[0]=aggFrac[0]; // Sat
+          autoBase[1]=aggFrac[1]; // Sun
+          for(let d=2;d<7;d++)autoBase[d]=weekdayLevel;
+          const autoSum=autoBase.reduce((s,v)=>s+v,0);
+          if(autoSum>0){
+            base=autoBase.map(v=>v/autoSum);
+            baseSource='auto-weekend';
+          }
+        }
+      }
+    }
+    // Fallback: no historical volumes for this channel — use flat 1/7
+    if(!base){
+      base=new Array(7).fill(1/7);
+      baseSource='flat';
+    }
   }
 
   // ── 2. Learn holiday multipliers per delta offset ──────────────────────
