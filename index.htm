@@ -150,6 +150,19 @@
 .shrink-component-warn.visible{display:block}
 /* Reset button defaults for toggle pills */
 button.ch-toggle,button.day-toggle{font-family:var(--font-sans);outline:none;border-radius:var(--radius-pill)}
+/* ── Week Roster (Tab 7) coverage grid ── */
+.wr-coverage-grid{width:100%;border-collapse:collapse;font-size:var(--text-xs);font-family:var(--font-mono)}
+.wr-coverage-grid th,.wr-coverage-grid td{padding:var(--sp-1) var(--sp-2);border:1px solid var(--border-subtle);text-align:center;white-space:nowrap}
+.wr-coverage-grid th{background:var(--surface-sunken);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.05em;color:var(--text-secondary)}
+.wr-coverage-grid td:first-child{text-align:left;background:var(--surface-sunken);color:var(--text-secondary);font-size:var(--text-xs)}
+.wr-cell-met{background:var(--color-green-50);color:var(--color-green-700)}
+.wr-cell-short-amber{background:var(--color-amber-50);color:var(--color-amber-700);font-weight:var(--weight-semibold)}
+.wr-cell-short-red{background:var(--color-red-50);color:var(--color-red-700);font-weight:var(--weight-semibold)}
+.wr-cell-surplus{background:var(--color-primary-50);color:var(--color-primary-700)}
+.wr-cell-zero{color:var(--text-tertiary)}
+.wr-shift-line{font-family:var(--font-mono);font-size:var(--text-sm);padding:var(--sp-2) var(--sp-3);border-bottom:1px solid var(--border-subtle)}
+.wr-shift-line:last-child{border-bottom:none}
+.wr-cap-warn{background:var(--color-red-50);border:1px solid var(--color-red-100);border-radius:var(--radius-md);padding:var(--sp-3) var(--sp-4);font-size:var(--text-sm);color:var(--color-red-700);margin-top:var(--sp-3)}
 button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--shadow-focus)}
 /* style-guide.css section 16 (HC Channel Picker) defines ch-toggle--disabled (future disabled state) and the legacy inert hc-blended-note rule (kept for cache compatibility; not rendered) */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;display:flex;align-items:center;justify-content:center}
@@ -730,60 +743,38 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
   </div>
 </section>
 
-<!-- ═══ TAB 7: SHIFT PLANNER ═══ -->
+<!-- ═══ TAB 7: SHIFT PLANNER (Week-Level Roster) ═══ -->
 <section class="tab-panel" id="tab6">
   <h2 class="sr-only">Shift planner</h2>
   <div class="section-header">
-    <div class="section-header__left"><h2>Shift planner &nbsp;<span id="spQueueBadge"></span></h2><p>Enter planned shifts and evaluate coverage gaps. Comparison against gross HC (bodies required on floor).</p></div>
+    <div class="section-header__left"><h2>Shift planner &nbsp;<span id="spQueueBadge"></span></h2><p>Week-level roster recommendation — greedy set-cover across all 7 days. Gross HC (bodies on floor) required.</p></div>
   </div>
-  <div class="form-group mb-4">
-    <label class="form-label">Holiday</label>
-    <select id="spHolidaySelect" onchange="populateSPDays()" style="max-width:400px"></select>
-  </div>
-  <div class="card mb-4">
-    <div class="card__header"><span class="card__title">Select day</span><span class="t-caption">Select one day to evaluate</span></div>
-    <div class="day-multiselect" id="spDayPicker"></div>
-  </div>
-  <div class="card mb-4">
-    <div class="card__header"><span class="card__title">Channels to evaluate</span><span class="t-caption">Select one or more</span></div>
-    <div class="ch-multiselect" id="spChannelPicker"></div>
-    <div id="spBlendedChannelNote" class="alert alert--info mt-2" style="display:none"><small>One or more holidays use the <strong>Blended</strong> channel. Blended coverage is not viewable in this tab — HC is computed via the blended formula but no Blended toggle is shown. To view coverage for blended holidays, review the HC &amp; Coverage tab (Tab 6) or export the final plan.</small></div>
-  </div>
-  <div class="layout-cols">
-    <div>
-      <div class="card">
-        <div class="card__header">
-          <span class="card__title">Planned shifts</span>
-          <button class="btn btn--secondary btn--sm" onclick="addShiftRow()">+ Add shift</button>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 90px 90px 70px 36px;gap:var(--sp-2);margin-bottom:var(--sp-2)">
-          <span class="t-label" style="font-size:10px">Shift name</span>
-          <span class="t-label" style="font-size:10px">Start</span>
-          <span class="t-label" style="font-size:10px">End</span>
-          <span class="t-label" style="font-size:10px">Agents</span>
-          <span></span>
-        </div>
-        <div id="shiftEntriesContainer"></div>
-        <button class="btn btn--ghost btn--sm mt-3" onclick="addShiftRow()">+ Add another shift</button>
-      </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:var(--sp-4);align-items:end" class="mb-4">
+    <div class="form-group">
+      <label class="form-label">Holiday</label>
+      <select id="wrHolidaySelect" onchange="onWRControlChange()"></select>
     </div>
-    <div>
-      <div class="ch-panel-tabs" id="spChannelPanelTabs"></div>
-      <div id="spChannelPanels"></div>
-      <div id="spNoneSelected" class="empty-state">
-        <div class="empty-state__icon">📋</div>
-        <div class="empty-state__title">No channels selected</div>
-        <div class="empty-state__body">Select at least one channel above.</div>
-      </div>
+    <div class="form-group">
+      <label class="form-label">Channel</label>
+      <div class="ch-multiselect" id="wrChannelPicker"></div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Shift length (hours)</label>
+      <input type="number" id="wrShiftHours" value="9" min="1" max="24" style="width:90px" oninput="onWRControlChange()">
     </div>
   </div>
-  <div id="shiftCoverageMetrics" class="metrics-row mt-6"></div>
-  <div style="position:relative;height:220px;margin-top:var(--sp-4)">
-    <canvas id="shiftCoverageChart" role="img" aria-label="Planned versus required HC by interval"></canvas>
+  <div id="wrEmailNote" class="alert alert--info mb-4" style="display:none">
+    <small><strong>Email channel:</strong> email staffing uses a daily throughput model with no per-interval variation. The gross HC requirement is spread evenly across all operating-window intervals for the purpose of the coverage grid.</small>
+  </div>
+  <div id="wrOutput">
+    <div class="empty-state">
+      <div class="empty-state__icon">&#128197;</div>
+      <div class="empty-state__title">Select a holiday and channel to generate the week roster</div>
+    </div>
   </div>
   <div class="flex justify-end mt-6 gap-3">
-    <button class="btn btn--secondary" onclick="switchTab(5)">← Back</button>
-    <button class="btn btn--primary" onclick="switchTab(7)">Continue →</button>
+    <button class="btn btn--secondary" onclick="switchTab(5)">&#8592; Back</button>
+    <button class="btn btn--primary" onclick="switchTab(7)">Continue &#8594;</button>
   </div>
 </section>
 
@@ -1456,7 +1447,7 @@ async function restoreQueuePlan(planKey){
   // '#tab6.active' correctly resolves to the Shift Planner section when it is visible.
   // The load modal is opened independently of switchTab so the active class is unchanged;
   // if the user had Tab 7 open when they clicked "Load saved plan", this check fires.
-  if(document.querySelector('#tab6.active'))populateSPSelects();
+  if(document.querySelector('#tab6.active'))populateWRSelects();
   // Tab 8 (Shift Recommendation): section element id='tab7', same pattern as above.
   if(document.querySelector('#tab7.active'))populateSRSelects();
   closeLoadModal();
@@ -1524,6 +1515,13 @@ let hcCache={};
 let shiftEntries=[];
 let spSelectedChannels=new Set(['voice']);
 let srSelectedChannels=new Set(['voice']);
+// Week Roster (Tab 7) state
+let wrChannel='voice'; // currently selected single channel for week roster
+// SURPLUS_THRESHOLD: scheduled > required * (1 + SURPLUS_THRESHOLD) triggers surplus coloring.
+// Default 0.20 = 20% above requirement. Exposed as a named constant, not a magic number.
+const WR_SURPLUS_THRESHOLD=0.20;
+// WR_ITER_CAP: hard upper bound on greedy loop iterations to prevent runaway.
+const WR_ITER_CAP=5000;
 let hcChartInst=null;
 let shiftChartInst=null;
 let spActivePanelCh='voice';
@@ -2235,6 +2233,13 @@ function invalidateAllCaches(){
   cfg.blendedVoicePct=_bv;
   cfg.blendedChatPct=_bc;
   cfg.blendedEmailPct=_be;
+  // Re-render week roster if Tab 7 (id="tab6") is currently active, because upstream
+  // forecast parameters (AHT, shrinkage, SL targets, operating hours) affect gross HC.
+  if(document.getElementById('tab6')&&document.getElementById('tab6').classList.contains('active')){
+    if(!invalidateAllCaches._wrTimer){
+      invalidateAllCaches._wrTimer=setTimeout(()=>{invalidateAllCaches._wrTimer=null;renderWeekRoster();},0);
+    }
+  }
 }
 function invalidateHCCache(){hcCache={};}
 function invalidateCombinationCache(hid){const h=APP.holidays.find(x=>x.id===hid);if(h){h.combinations={};}}
@@ -5082,7 +5087,8 @@ function selectSPDay(idx){
   renderSPDayPicker(_spPickerDays);recomputeAllChannelCoverage();
 }
 function populateSPSelects(){
-  document.getElementById('spHolidaySelect').innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
+  const _spHolSel=document.getElementById('spHolidaySelect');
+  if(_spHolSel)_spHolSel.innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
   populateSPDays();
 }
 function populateSPDays(){
@@ -5100,7 +5106,9 @@ function addShiftRow(name='',start='09:00',end='17:00',agents=10){
   renderShiftRows();recomputeAllChannelCoverage();
 }
 function renderShiftRows(){
-  document.getElementById('shiftEntriesContainer').innerHTML=shiftEntries.map((s,i)=>`
+  const _shiftEntriesEl=document.getElementById('shiftEntriesContainer');
+  if(!_shiftEntriesEl)return;
+  _shiftEntriesEl.innerHTML=shiftEntries.map((s,i)=>`
     <div class="shift-entry-row">
       <input type="text" value="${escHtml(s.name)}" placeholder="e.g. Early"
         oninput="shiftEntries[${i}].name=this.value">
@@ -5120,6 +5128,7 @@ function buildSPPanelTabs(){
   const tabsEl=document.getElementById('spChannelPanelTabs');
   const panelsEl=document.getElementById('spChannelPanels');
   const noneEl=document.getElementById('spNoneSelected');
+  if(!tabsEl||!panelsEl||!noneEl)return;
   if(!channels.length){tabsEl.innerHTML='';panelsEl.innerHTML='';noneEl.style.display='block';return;}
   noneEl.style.display='none';
   if(!channels.includes(spActivePanelCh))spActivePanelCh=channels[0];
@@ -5180,7 +5189,7 @@ function recomputeAllChannelCoverage(){
   const h=hid&&APP.holidays.find(x=>x.id===hid);
   if(!h)return;
   const channels=[...spSelectedChannels];
-  if(!channels.length){document.getElementById('shiftCoverageMetrics').innerHTML='';return;}
+  if(!channels.length){const _scm=document.getElementById('shiftCoverageMetrics');if(_scm)_scm.innerHTML='';return;}
   let totalGreen=0,totalAmber=0,totalRed=0,totalIvs=0;
   channels.forEach(ch=>{
     const{days}=buildDailyData(h,ch);
@@ -5198,7 +5207,8 @@ function recomputeAllChannelCoverage(){
   });
   const totalPlanned=shiftEntries.reduce((a,s)=>a+(+s.agents||0),0);
   const covPct=totalIvs>0?Math.round(100*totalGreen/totalIvs):0;
-  document.getElementById('shiftCoverageMetrics').innerHTML=`
+  const _scmEl=document.getElementById('shiftCoverageMetrics');
+  if(_scmEl)_scmEl.innerHTML=`
     <div class="metric-card metric-card--success"><div class="metric-card__label">Intervals on target</div><div class="metric-card__value">${totalGreen}</div></div>
     <div class="metric-card metric-card--warning"><div class="metric-card__label">Amber intervals</div><div class="metric-card__value">${totalAmber}</div></div>
     <div class="metric-card metric-card--danger"><div class="metric-card__label">At-risk intervals</div><div class="metric-card__value">${totalRed}</div></div>
@@ -5235,7 +5245,9 @@ function renderShiftCoverageChart(h,dayIdx,ch){
       <span class="chart-legend__swatch" style="background:${_cPrimaryFill2};border:1px solid ${_cPrimaryLine2}"></span>
       <span>Planned HC (agents assigned across shifts)</span>
     </span>`;
-  shiftChartInst=new Chart(document.getElementById('shiftCoverageChart'),{
+  const _scCanvas2=document.getElementById('shiftCoverageChart');
+  if(!_scCanvas2)return;
+  shiftChartInst=new Chart(_scCanvas2,{
     type:'bar',data:{labels:coverage.map(c=>c.start),datasets:[
       {label:'Required (gross)',data:coverage.map(c=>c.required),backgroundColor:_cRedFill,borderColor:_cRedLine,borderWidth:1},
       {label:'Planned',data:coverage.map(c=>c.planned),backgroundColor:_cPrimaryFill2,borderColor:_cPrimaryLine2,borderWidth:1}
@@ -5562,6 +5574,384 @@ function greedyOptimise(intervals,opStart,opEnd,pool){
 }
 
 /* ================================================================
+   TAB 7: WEEK-LEVEL ROSTER ENGINE — buildWeekRoster + UI rendering
+   Greedy set-cover across all 7 days of the holiday week.
+
+   Day pattern encoding (Sat-first, 7 characters):
+     Position: 0=Sat 1=Sun 2=Mon 3=Tue 4=Wed 5=Thu 6=Fri
+     Letter when working: Y S M T W R F
+     Character when off:  -
+   Example: "YS-T-RF" = Sat,Sun,Tue,Thu,Fri working; Mon,Wed off.
+
+   Each candidate shift is a (startTime, 5-of-7 dayPattern) pair.
+   The engine generates all C(7,5)=21 day patterns and all valid
+   30-min start times within the operating window. For each candidate
+   it counts how many agents are needed (= deepest per-interval
+   shortfall across its working days). Greedy: pick the candidate that
+   absorbs the most total shortfall; add agents; repeat until all
+   intervals are met or WR_ITER_CAP is hit.
+
+   Returns:
+     { shiftGroups, coverageGrid, summary }
+     shiftGroups[]:   { n, start, end, agents, dayPattern }
+     coverageGrid[]:  { time, dayReqs[7], daySched[7] }
+     summary:         { totalAgents, totalAgentHours, coveragePct, intervalsShort, iterCapHit, uncoveredIntervals }
+================================================================ */
+
+// Day pattern alphabet (Sat-first, matching DAYS order)
+const WR_DAY_LETTERS=['Y','S','M','T','W','R','F'];
+
+// generateDayPatterns: returns all C(7,5)=21 arrays of 7 booleans with exactly 5 true entries.
+function generateDayPatterns(){
+  const result=[];
+  for(let mask=0;mask<128;mask++){
+    if(bin1count(mask)===5)result.push([0,1,2,3,4,5,6].map(i=>!!(mask&(1<<i))));
+  }
+  return result;
+}
+function bin1count(n){let c=0;while(n){c+=n&1;n>>>=1;}return c;}
+
+// dayPatternString: converts a 7-bool array to a 7-char display string (e.g. "YS-TWR-")
+function dayPatternString(pattern){
+  return pattern.map((on,i)=>on?WR_DAY_LETTERS[i]:'-').join('');
+}
+
+function buildWeekRoster(channel,holidayKey,shiftHoursRaw){
+  const shiftHours=Math.max(1,Math.min(24,+shiftHoursRaw||9));
+  const h=APP.holidays.find(x=>x.id===holidayKey);
+  if(!h)return null;
+
+  // Pull per-day interval data using buildDailyData — never recompute staffing model
+  const{days}=buildDailyData(h,channel);
+  if(!days||!days.length)return null;
+
+  const opStart=days[0].opStart;
+  const opEnd=days[0].opEnd;
+  const shiftMins=shiftHours*60;
+
+  // Build per-day interval arrays (7 days, Sat-first matching DAYS order)
+  // days[] from buildDailyData is already in DAYS order (Sat..Fri)
+  const dayIntervals=days.map(d=>d.intervals); // array[7] of interval arrays
+
+  // Collect all unique interval time slots across all days for coverage grid rows
+  // Use the first day's intervals as the template (all days share the same operating window)
+  const ivTemplate=dayIntervals.find(iv=>iv&&iv.length)||[];
+  if(!ivTemplate.length)return null;
+  const numIntervals=ivTemplate.length;
+
+  // For email: daily HC is flat across all intervals — already embedded in grossHC by computeIntervals
+  // No special handling needed; grossHC is uniform across intervals for email.
+
+  // Build requirement matrix: req[dayIdx][ivIdx] = grossHC
+  const req=dayIntervals.map(ivs=>ivs.map(iv=>iv.grossHC||0));
+
+  // Generate all valid shift candidate (start, dayPattern) pairs
+  const allDayPatterns=generateDayPatterns(); // 21 patterns
+
+  // Valid shift starts: 30-min steps where start + shiftHours fits within operating window
+  // For overnight windows: shiftHours is bounded by the operating window duration
+  const winDurH=windowDurationHours(opStart,opEnd)||24;
+  const winDurMins=winDurH*60;
+  const opStartMin=toMinutes(opStart);
+  const maxStartOffset=Math.max(0,winDurMins-shiftMins); // furthest start offset from opStart
+  const startOffsets=[];
+  for(let off=0;off<=maxStartOffset;off+=30)startOffsets.push(off);
+  // Edge case: if shiftHours >= window duration, only one start (opStart itself)
+  if(!startOffsets.length)startOffsets.push(0);
+
+  const candidates=[];
+  allDayPatterns.forEach(pat=>{
+    startOffsets.forEach(off=>{
+      const startMin=opStartMin+off;
+      const endMin=startMin+shiftMins;
+      const start=minutesToTime(startMin);
+      const end=minutesToTime(endMin);
+      // coverMap[dayIdx][ivIdx]: does this candidate cover this interval on this day?
+      const coverMap=dayIntervals.map((ivs,di)=>{
+        if(!pat[di])return ivs.map(()=>false);
+        return ivs.map(iv=>intervalOverlapsShift(toMinutes(iv.start),toMinutes(iv.end),startMin,endMin));
+      });
+      candidates.push({start,end,startMin,endMin,pat,coverMap});
+    });
+  });
+
+  // Residual requirement matrix (mutable copy): res[dayIdx][ivIdx]
+  const res=req.map(row=>[...row]);
+
+  // Greedy set-cover loop
+  const picks=[]; // {start,end,agents,pat} — one entry per greedy pick
+  let iterCount=0;
+  let iterCapHit=false;
+  let structuralGap=false;
+
+  while(iterCount<WR_ITER_CAP){
+    // Check if all residuals are zero
+    let allMet=true;
+    outer:for(let di=0;di<7;di++){for(let ii=0;ii<numIntervals;ii++){if(res[di][ii]>0){allMet=false;break outer;}}}
+    if(allMet)break;
+
+    // Find candidate with maximum total shortfall absorption
+    let bestCand=null,bestAbsorb=0,bestBatchSize=0;
+    candidates.forEach(cand=>{
+      // Compute how much total shortfall this candidate absorbs
+      let absorb=0;
+      let deepest=0;
+      for(let di=0;di<7;di++){
+        if(!cand.pat[di])continue;
+        for(let ii=0;ii<numIntervals;ii++){
+          if(cand.coverMap[di][ii]&&res[di][ii]>0){
+            absorb+=res[di][ii];
+            if(res[di][ii]>deepest)deepest=res[di][ii];
+          }
+        }
+      }
+      if(absorb>bestAbsorb||(absorb===bestAbsorb&&deepest>bestBatchSize)){
+        bestAbsorb=absorb;bestBatchSize=deepest;bestCand=cand;
+      }
+    });
+
+    if(!bestCand||bestAbsorb===0){
+      // No candidate can absorb any remaining shortfall — structural gap
+      structuralGap=true;
+      iterCapHit=true;
+      break;
+    }
+
+    // Add bestBatchSize agents for the chosen candidate
+    const agentsToAdd=Math.max(1,bestBatchSize);
+    picks.push({start:bestCand.start,end:bestCand.end,agents:agentsToAdd,pat:bestCand.pat,startMin:bestCand.startMin,endMin:bestCand.endMin});
+
+    // Update residuals
+    for(let di=0;di<7;di++){
+      if(!bestCand.pat[di])continue;
+      for(let ii=0;ii<numIntervals;ii++){
+        if(bestCand.coverMap[di][ii]){
+          res[di][ii]=Math.max(0,res[di][ii]-agentsToAdd);
+        }
+      }
+    }
+    iterCount++;
+  }
+
+  if(iterCount>=WR_ITER_CAP){
+    iterCapHit=true;
+    // Final residual check — mark uncovered intervals
+  }
+
+  // Merge duplicate (start+end+pattern) picks into shift groups
+  const groupMap=new Map();
+  picks.forEach(p=>{
+    const key=p.start+'|'+p.end+'|'+p.pat.join('');
+    if(groupMap.has(key)){
+      groupMap.get(key).agents+=p.agents;
+    } else {
+      groupMap.set(key,{start:p.start,end:p.end,agents:p.agents,pat:p.pat,startMin:p.startMin,endMin:p.endMin});
+    }
+  });
+  const shiftGroups=[...groupMap.values()].sort((a,b)=>b.agents-a.agents);
+
+  // Compute coverage grid: sched[dayIdx][ivIdx] = total scheduled agents
+  const sched=Array.from({length:7},()=>new Array(numIntervals).fill(0));
+  shiftGroups.forEach(sg=>{
+    for(let di=0;di<7;di++){
+      if(!sg.pat[di])continue;
+      dayIntervals[di].forEach((iv,ii)=>{
+        if(intervalOverlapsShift(toMinutes(iv.start),toMinutes(iv.end),sg.startMin,sg.endMin)){
+          sched[di][ii]+=sg.agents;
+        }
+      });
+    }
+  });
+
+  // Build coverageGrid rows
+  const coverageGrid=ivTemplate.map((iv,ii)=>({
+    time:iv.start+'–'+iv.end,
+    dayReqs:[0,1,2,3,4,5,6].map(di=>req[di]&&req[di][ii]!==undefined?req[di][ii]:0),
+    daySched:[0,1,2,3,4,5,6].map(di=>sched[di][ii]||0)
+  }));
+
+  // Summary metrics
+  const totalAgents=shiftGroups.reduce((a,sg)=>a+sg.agents,0);
+  // agent-hours: agents * shift_length * working_days
+  const totalAgentHours=shiftGroups.reduce((a,sg)=>a+sg.agents*shiftHours*sg.pat.filter(Boolean).length,0);
+  // Coverage %: fraction of (dayIdx,ivIdx) cells where sched >= req (excluding zero-req cells)
+  let metCount=0,totalCells=0,shortCount=0;
+  const uncoveredIntervals=[];
+  for(let di=0;di<7;di++){
+    for(let ii=0;ii<numIntervals;ii++){
+      const r=req[di][ii]||0;
+      if(r===0)continue;
+      totalCells++;
+      const s=sched[di][ii]||0;
+      if(s>=r){metCount++;}else{
+        shortCount++;
+        uncoveredIntervals.push({day:DAYS[di],time:ivTemplate[ii].start+'–'+ivTemplate[ii].end,required:r,scheduled:s,gap:r-s});
+      }
+    }
+  }
+  const coveragePct=totalCells>0?Math.round(100*metCount/totalCells):100;
+
+  // Attach numbered labels to shift groups
+  shiftGroups.forEach((sg,i)=>{sg.n=i+1;sg.dayPattern=dayPatternString(sg.pat);});
+
+  return{
+    shiftGroups,
+    coverageGrid,
+    summary:{totalAgents,totalAgentHours,coveragePct,intervalsShort:shortCount,iterCapHit,structuralGap,uncoveredIntervals},
+    channel,
+    opStart,opEnd,shiftHours
+  };
+}
+
+/* ── Week Roster UI helpers ── */
+function populateWRSelects(){
+  const sel=document.getElementById('wrHolidaySelect');
+  if(!sel)return;
+  const prev=sel.value;
+  sel.innerHTML=APP.holidays.map(h=>`<option value="${h.id}">${escHtml(h.name)||'Unnamed'} ${h.date?`(${h.date})`:''}</option>`).join('');
+  if(prev&&APP.holidays.find(x=>x.id===prev))sel.value=prev;
+  renderWRChannelPicker();
+  renderWeekRoster();
+}
+
+function renderWRChannelPicker(){
+  const el=document.getElementById('wrChannelPicker');if(!el)return;
+  // CHANNELS = ['voice','chat','email'] — blended is excluded by the constant.
+  el.innerHTML=CHANNELS.map(function(ch){
+    const activeCls=wrChannel===ch?'ch-toggle active-'+ch:'ch-toggle';
+    return'<button type="button" class="'+activeCls+'" onclick="wrChannel=\''+ch+'\';renderWRChannelPicker();onWRControlChange()">'+ch.charAt(0).toUpperCase()+ch.slice(1)+'</button>';
+  }).join('');
+}
+
+function onWRControlChange(){
+  renderWeekRoster();
+}
+
+function renderWeekRoster(){
+  const outEl=document.getElementById('wrOutput');if(!outEl)return;
+  const hid=document.getElementById('wrHolidaySelect')?.value;
+  const shiftHours=+(document.getElementById('wrShiftHours')?.value||9);
+  const ch=wrChannel||'voice';
+  if(!hid||!APP.holidays.length){
+    outEl.innerHTML='<div class="empty-state"><div class="empty-state__icon">&#128197;</div><div class="empty-state__title">Select a holiday and channel to generate the week roster</div></div>';
+    return;
+  }
+  const h=APP.holidays.find(x=>x.id===hid);
+  if(!h){
+    outEl.innerHTML='<div class="alert alert--warning">Holiday not found.</div>';
+    return;
+  }
+
+  // Show email note if email channel selected
+  const emailNote=document.getElementById('wrEmailNote');
+  if(emailNote)emailNote.style.display=ch==='email'?'':'none';
+
+  // Run roster engine
+  const roster=buildWeekRoster(ch,hid,shiftHours);
+  if(!roster||!roster.shiftGroups){
+    outEl.innerHTML='<div class="alert alert--warning mb-4">No forecast data found for <strong>'+escHtml(h.name||'this holiday')+'</strong> / <strong>'+ch+'</strong>. Ensure HC &amp; Coverage data is set up for this channel on Tab 6.</div>';
+    return;
+  }
+
+  const{shiftGroups,coverageGrid,summary}=roster;
+
+  // Summary metrics
+  const summaryClass=summary.coveragePct>=100?'success':summary.coveragePct>=80?'warning':'danger';
+  const summaryHtml=`
+    <div class="metrics-row mb-6">
+      <div class="metric-card metric-card--${summaryClass}"><div class="metric-card__label">Coverage</div><div class="metric-card__value">${summary.coveragePct}%</div></div>
+      <div class="metric-card"><div class="metric-card__label">Total agents</div><div class="metric-card__value">${summary.totalAgents}</div></div>
+      <div class="metric-card"><div class="metric-card__label">Total agent-hours</div><div class="metric-card__value">${summary.totalAgentHours.toLocaleString()}</div></div>
+      <div class="metric-card ${summary.intervalsShort>0?'metric-card--danger':'metric-card--success'}"><div class="metric-card__label">Intervals short</div><div class="metric-card__value">${summary.intervalsShort}</div></div>
+      <div class="metric-card"><div class="metric-card__label">Shift groups</div><div class="metric-card__value">${shiftGroups.length}</div></div>
+    </div>`;
+
+  // Iteration cap / structural gap warning (never silent)
+  let capWarnHtml='';
+  if(summary.iterCapHit&&summary.intervalsShort>0){
+    const worstList=summary.uncoveredIntervals.slice(0,10).map(u=>`<li>${u.day} ${u.time}: required ${u.required}, scheduled ${u.scheduled} (gap ${u.gap})</li>`).join('');
+    const moreCount=summary.uncoveredIntervals.length-10;
+    const stopReason=summary.structuralGap
+      ?`Structural gap — no available shift pattern covers the remaining intervals`
+      :`Iteration cap (${WR_ITER_CAP}) reached`;
+    capWarnHtml=`<div class="wr-cap-warn"><strong>${stopReason} — ${summary.intervalsShort} interval${summary.intervalsShort===1?'':'s'} remain uncovered.</strong> The roster engine stopped before full coverage was achieved. Uncovered intervals:<ul style="margin:var(--sp-2) 0 0 var(--sp-4)">${worstList}${moreCount>0?`<li>…and ${moreCount} more</li>`:''}</ul>Resolution: increase shift length, verify forecast data on Tab 6, or check that volumes are non-zero for all 7 days.</div>`;
+  } else if(summary.iterCapHit&&summary.intervalsShort===0){
+    // Cap hit but all intervals covered — informational only
+    capWarnHtml=`<div class="alert alert--info mb-4">Note: the roster engine reached the iteration cap (${WR_ITER_CAP}) but achieved 100% coverage.</div>`;
+  }
+
+  // Section 1: Shift group lines
+  const shiftLinesHtml=shiftGroups.length?`
+    <div class="card mb-6">
+      <div class="card__header"><span class="card__title">Shift groups</span><span class="t-caption">Sorted by agent count (largest first). Day pattern: Sat Sun Mon Tue Wed Thu Fri</span></div>
+      <div>${shiftGroups.map(sg=>`<div class="wr-shift-line">Shift ${sg.n} &middot; ${sg.start}&ndash;${sg.end} &middot; ${sg.agents} agent${sg.agents===1?'':'s'} &middot; Days working: ${sg.dayPattern}</div>`).join('')}</div>
+    </div>`:'';
+
+  // Section 2: Table A — Coverage grid
+  // Columns: Interval | Sat | Sun | Mon | Tue | Wed | Thu | Fri
+  // Cell = scheduled count; color = shortage/surplus/met
+  const coverageGridHtml=coverageGrid.length?`
+    <div class="card mb-6">
+      <div class="card__header"><span class="card__title">Table A — Coverage grid</span><span class="t-caption">Scheduled agents per 30-min interval per day. Gross HC requirement shown as req value. ${WR_SURPLUS_THRESHOLD*100}%+ surplus = blue; shortage (amber/red); met = green.</span></div>
+      <div class="table-wrap" style="max-height:420px;overflow-y:auto;overflow-x:auto">
+        <table class="wr-coverage-grid">
+          <thead>
+            <tr>
+              <th>Interval</th>
+              ${DAYS.map(d=>`<th>${d}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${coverageGrid.map(row=>{
+              const cells=row.dayReqs.map((req,di)=>{
+                const sched=row.daySched[di];
+                if(req===0&&sched===0)return`<td class="wr-cell-zero">-</td>`;
+                if(req===0)return`<td class="wr-cell-surplus">${sched}</td>`;
+                let cls;
+                if(sched>=req*(1+WR_SURPLUS_THRESHOLD)){cls='wr-cell-surplus';}
+                else if(sched>=req){cls='wr-cell-met';}
+                else if(sched>=req*0.85){cls='wr-cell-short-amber';}
+                else{cls='wr-cell-short-red';}
+                return`<td class="${cls}" title="req ${req}">${sched}</td>`;
+              }).join('');
+              return`<tr><td>${row.time}</td>${cells}</tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+      <div class="flex gap-3 mt-3" style="font-size:var(--text-xs)">
+        <span style="background:var(--color-green-50);padding:2px 8px;border-radius:var(--radius-sm);color:var(--color-green-700)">Green = met</span>
+        <span style="background:var(--color-primary-50);padding:2px 8px;border-radius:var(--radius-sm);color:var(--color-primary-700)">Blue = &gt;${WR_SURPLUS_THRESHOLD*100}% surplus</span>
+        <span style="background:var(--color-amber-50);padding:2px 8px;border-radius:var(--radius-sm);color:var(--color-amber-700)">Amber = &lt;15% short</span>
+        <span style="background:var(--color-red-50);padding:2px 8px;border-radius:var(--radius-sm);color:var(--color-red-700)">Red = &ge;15% short</span>
+      </div>
+    </div>`:'';
+
+  // Section 3: Table B — Roster table
+  const rosterTableHtml=shiftGroups.length?`
+    <div class="card mb-6">
+      <div class="card__header"><span class="card__title">Table B — Roster</span><span class="t-caption">One row per shift group</span></div>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead><tr><th>Number of Agents</th><th>Shift</th><th>Days Worked</th></tr></thead>
+          <tbody>
+            ${shiftGroups.map(sg=>`<tr>
+              <td class="td--mono"><strong>${sg.agents}</strong></td>
+              <td class="td--mono">${sg.start}&ndash;${sg.end}</td>
+              <td class="td--mono" style="letter-spacing:.05em">${sg.dayPattern}</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr><td><strong>${summary.totalAgents}</strong></td><td colspan="2">Total agents</td></tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>`:'';
+
+  outEl.innerHTML=summaryHtml+capWarnHtml+shiftLinesHtml+coverageGridHtml+rosterTableHtml;
+}
+
+/* ================================================================
    FORWARD-COMPATIBILITY MIGRATION GUARD
    Ensures APP.holidays entries always conform to the current schema
    before any downstream tab reads from them. Handles:
@@ -5702,7 +6092,7 @@ function switchTab(idx){
   if(idx===3)renderRecommendation();
   if(idx===4)renderDailyBreakdown();
   if(idx===5){populateHCSelects();updateShrinkage();renderHCTab();}
-  if(idx===6){populateSPSelects();}
+  if(idx===6){populateWRSelects();}
   if(idx===7){populateSRSelects();}
 }
 
@@ -6176,7 +6566,16 @@ function exportData(){
     holidays:APP.holidays},`holiday_plan_${new Date().toISOString().slice(0,10)}.json`);
 }
 function exportFinalPlan(){
+  // Collect week roster shift groups for the currently selected holiday/channel/shift-length
+  // on Tab 7. If Tab 7 has not been opened or no holiday is selected, shiftGroups is null.
+  // This does NOT change the schema version — shiftGroups is an additive optional field.
+  // Downstream consumers must check shiftGroups !== null before iterating.
+  const _wrHid=document.getElementById('wrHolidaySelect')?.value;
+  const _wrSh=+(document.getElementById('wrShiftHours')?.value||9);
+  const _wrRoster=(_wrHid&&APP.holidays.length)?buildWeekRoster(wrChannel,_wrHid,_wrSh):null;
+  const shiftGroups=_wrRoster?_wrRoster.shiftGroups.map(sg=>({start:sg.start,end:sg.end,agents:sg.agents,dayPattern:sg.dayPattern})):null;
   downloadJSON({_type:'final_plan',_exported:new Date().toISOString(),_version:'2.0',
+    weekRoster:{channel:wrChannel,shiftGroups},
     config:{shrinkage:APP.config.shrink,serviceLevelTargets:APP.config.sl,aht:APP.config.aht,concurrency:APP.config.concurrency,emailOccupancy:APP.config.emailOccupancy,blendedSplit:{voice:APP.config.blendedVoicePct,chat:APP.config.blendedChatPct,email:APP.config.blendedEmailPct},defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd}},
     holidays:APP.holidays.map(h=>({name:h.name,date:h.date,planSource:h.planSource,channels:h.channels,
       selectedCombinations:h.selectedCombos,
@@ -6204,6 +6603,12 @@ function resetAll(){
   hcSelectedChannels=new Set(['voice']);hcActivePanelCh='voice';
   spActiveDayIdx=0;srActiveDayIdx=0;hcDrillActiveDayIdx=0;queueConfirmed=false;
   _spPickerDays=[];_srPickerDays=[];_hcPickerDays=[];
+  // Reset week roster state
+  wrChannel='voice';
+  const _wrOut=document.getElementById('wrOutput');
+  if(_wrOut)_wrOut.innerHTML='<div class="empty-state"><div class="empty-state__icon">&#128197;</div><div class="empty-state__title">Select a holiday and channel to generate the week roster</div></div>';
+  const _wrHolSel=document.getElementById('wrHolidaySelect');if(_wrHolSel)_wrHolSel.innerHTML='';
+  renderWRChannelPicker();
   // FIX 3: reset utilization touched state on new plan
   _utilTouched.voice=false;_utilTouched.chat=false;
   document.getElementById('queueName').value='';
