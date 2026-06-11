@@ -3041,6 +3041,13 @@ function renderDailyBreakdown(){
         } else {
           splits=h.dowSplit[ch];_useHolidaySplit=false;
         }
+        // Holiday-anchored DOW rotation (Case A and Case B only):
+        // shift the historical split so the holiday dip aligns to the plan-year holiday weekday.
+        // Case C (global h.dowSplit[ch]) is intentionally not rotated.
+        if(_useHolidaySplit&&_tab5SlotKey){
+          const _slotYearEntry=h.years&&h.years[_tab5SlotKey.toUpperCase()];
+          splits=_rotateSplitToHoliday(splits,(_slotYearEntry||{}).holidayDate||'',h.date||'');
+        }
         const splitSum=splits.reduce((a,b)=>a+b,0);
         const eff=splitSum>0?splits.map(s=>s/splitSum*100):splits.map(()=>100/7);
         return`<div class="mb-4">
@@ -3154,6 +3161,29 @@ function _parseDateCol(dateStr){
   const dow=d.getDay(); // 0=Sun..6=Sat
   // Map JS getDay() to DAYS array index (Sat=0,Sun=1,Mon=2,Tue=3,Wed=4,Thu=5,Fri=6)
   return dow===6?0:dow+1;
+}
+
+/* _rotateSplitToHoliday: cyclically rotate a 7-element DOW split array so that the
+   holiday dip from a historical slot (slotHolidayDate) lands on the correct weekday
+   in the plan year (targetDate). Both dates must be 'yyyy-mm-dd' strings.
+   ROTATION: shift = (c_t - c_y + 7) % 7 where c_t = _parseDateCol(targetDate),
+             c_y = _parseDateCol(slotHolidayDate).
+   The rotated array maps position (i + shift) % 7 ← splitArr[i].
+   If either date is absent/invalid, returns splitArr unchanged and logs console.info.
+   A shift=0 (same weekday both years) returns the input array reference unchanged.
+   Input splitArr is never mutated — always returns a new array when rotation occurs. */
+function _rotateSplitToHoliday(splitArr,slotHolidayDate,targetDate){
+  const c_y=_parseDateCol(slotHolidayDate);
+  const c_t=_parseDateCol(targetDate);
+  if(c_y<0||c_t<0){
+    console.info('[WFM DOW-rotation] date absent or invalid — slotHolidayDate:'+slotHolidayDate+' targetDate:'+targetDate+' — using unrotated split.');
+    return splitArr;
+  }
+  const shift=(c_t-c_y+7)%7;
+  if(shift===0)return splitArr; // no-op: same weekday, return input unchanged
+  const rotated=new Array(7);
+  for(let i=0;i<7;i++){rotated[(i+shift)%7]=splitArr[i];}
+  return rotated;
 }
 
 function computeDayIndexForecast(h){
@@ -3560,16 +3590,27 @@ function buildDailyData(h,ch){
   // Case B: legacy flat array — treat as shared blended split (backward compatibility)
   // Case C: null — fall back to h.dowSplit[ch]
   let splits;
+  let _usedHolidaySplitBDD=false;
   if(perSlotEntry&&!Array.isArray(perSlotEntry)&&typeof perSlotEntry==='object'){
     // Case A: per-channel object — read channel-specific array; fall back to h.dowSplit[ch] if null
     const chFracs=perSlotEntry[ch];
-    splits=(Array.isArray(chFracs)&&chFracs.length===7)?chFracs:h.dowSplit[ch];
+    const _chValid=Array.isArray(chFracs)&&chFracs.length===7;
+    splits=_chValid?chFracs:h.dowSplit[ch];
+    _usedHolidaySplitBDD=_chValid;
   } else if(Array.isArray(perSlotEntry)&&perSlotEntry.length===7){
     // Case B: legacy flat array — use as shared split (old saved plans before this fix)
     splits=perSlotEntry;
+    _usedHolidaySplitBDD=true;
   } else {
     // Case C: no per-slot split — use global per-channel DOW split
     splits=h.dowSplit[ch];
+  }
+  // Holiday-anchored DOW rotation (Case A and Case B only):
+  // shift the historical split so the holiday dip aligns to the plan-year holiday weekday.
+  // Case C (global h.dowSplit[ch]) is intentionally not rotated.
+  if(_usedHolidaySplitBDD&&effectiveSlotKey){
+    const _bddYearEntry=h.years&&h.years[effectiveSlotKey.toUpperCase()];
+    splits=_rotateSplitToHoliday(splits,(_bddYearEntry||{}).holidayDate||'',h.date||'');
   }
   const splitSum=splits.reduce((a,b)=>a+b,0);
   const opStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
