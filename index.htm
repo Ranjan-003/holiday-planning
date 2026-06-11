@@ -2117,11 +2117,18 @@ function newHoliday(id){
   // h.dowSplit[ch] (global per-channel DOW split). null at slot level means no split for that slot.
   const dailyVolumes={};YEAR_SLOTS.forEach(y=>{dailyVolumes[y.toLowerCase()]=_emptyDVSlot();});
   const holidayDowSplit={};YEAR_SLOTS.forEach(y=>{holidayDowSplit[y.toLowerCase()]=null;});
+  // normalWeekShape: optional per-channel 7-day typical non-holiday week (Sat-first).
+  //   Used as base shape in computeHolidayShapedSplit (highest priority, above dowSplit).
+  //   null/absent means fall back to dowSplit/flat chain.
+  // dowSplitManual: per-channel boolean flag; true when user has hand-edited Tab 5 split inputs.
+  //   When true, buildDailyData uses h.dowSplit[ch] verbatim (bypasses decomposition model).
   return{id,name:'',date:'',channels:['voice'],planSource:'WFM Forecast',
     planVolume:{voice:0,chat:0,email:0,blended:0},
     operatingHoursOverride:false,operatingHours:{start:'08:00',end:'20:00'},
     years,autoAnomalyFlags:{},manualAnomalyOverrides:{},
     dowSplit:{voice:[...DEFAULT_DOW_SPLIT],chat:[...DEFAULT_DOW_SPLIT],email:[...DEFAULT_DOW_SPLIT],blended:[...DEFAULT_DOW_SPLIT]},
+    dowSplitManual:{voice:false,chat:false,email:false,blended:false},
+    normalWeekShape:{voice:null,chat:null,email:null,blended:null},
     dailyVolumes,
     holidayDowSplit,
     forecastOverride:{},
@@ -2387,6 +2394,27 @@ function renderHolidayList(resetPage){
           </div>`).join('')}
         </div>`;
       })()}
+      <!-- ── Normal week shape (optional) — used as base shape in decomposition model ── -->
+      <div class="card mt-4" style="background:var(--surface-sunken)">
+        <div class="card__header">
+          <span class="card__title" style="font-size:var(--text-sm)">Typical non-holiday week <span class="field-optional-hint">optional</span></span>
+        </div>
+        <p style="font-size:var(--text-xs);color:var(--text-secondary);margin-bottom:var(--sp-3)">Enter a representative non-holiday week (any unit, same scale per channel — e.g. average daily contacts for a normal week). Used as the base shape in the holiday-multiplier decomposition model. Leave blank to use the day-of-week split above or a flat base.</p>
+        ${CHANNELS.map(ch=>{
+          const nws=h.normalWeekShape&&Array.isArray(h.normalWeekShape[ch])&&h.normalWeekShape[ch].length===7?h.normalWeekShape[ch]:new Array(7).fill('');
+          return`<div class="mb-3">
+            <div class="flex items-center gap-2 mb-1"><span class="badge badge--${ch}">${ch}</span></div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-2)">
+              ${DAYS.map((d,di)=>`<div>
+                <label style="font-size:9px;color:var(--text-tertiary);display:block;text-align:center">${d}</label>
+                <input type="number" value="${nws[di]!=null&&nws[di]!==''?nws[di]:''}" step="1" min="0" placeholder="—"
+                  style="height:26px;font-size:var(--text-xs);text-align:center"
+                  oninput="setNormalWeekShape('${h.id}','${ch}',${di},this.value)">
+              </div>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
     </div>`;
   }).join('')+showMoreHTML;
   // Sync forecast section visibility after DOM is populated.
@@ -2410,6 +2438,20 @@ function toggleChannel(hid,ch,checked){
   if(checked&&!h.channels.includes(ch))h.channels.push(ch);
   if(!checked)h.channels=h.channels.filter(x=>x!==ch);
   invalidateCombinationCache(hid);
+}
+/* setNormalWeekShape: stores a value in h.normalWeekShape[ch][di].
+   Normalisation is performed internally by computeHolidayShapedSplit at use time.
+   Stored as raw number (same scale as entered — any unit, same scale per channel).
+   Empty input clears the cell (null). Invalidates caches so Tab 5 / Tab 6 reflect the change. */
+function setNormalWeekShape(hid,ch,di,rawVal){
+  const h=APP.holidays.find(x=>x.id===hid);if(!h)return;
+  if(!h.normalWeekShape||typeof h.normalWeekShape!=='object')h.normalWeekShape={voice:null,chat:null,email:null,blended:null};
+  if(!Array.isArray(h.normalWeekShape[ch])||h.normalWeekShape[ch].length!==7){
+    h.normalWeekShape[ch]=new Array(7).fill(null);
+  }
+  const trimmed=String(rawVal).trim();
+  h.normalWeekShape[ch][di]=(trimmed==='')?null:Math.max(0,+trimmed||0);
+  invalidateAllCaches();
 }
 
 /* ================================================================
@@ -2995,90 +3037,126 @@ function renderRecommendation(){
 function renderDailyBreakdown(){
   const el=document.getElementById('dailyBreakdownContent');
   if(!APP.holidays.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No data</div></div>';return;}
-  el.innerHTML=APP.holidays.map(h=>`
+  el.innerHTML=APP.holidays.map(h=>{
+    // Check whether any active year slot has a valid holidayDate for this holiday
+    // (needed to show the no-holidayDate note once per holiday, not per channel)
+    const anyValidDate=_activeYearSlots().some(y=>_parseDateCol((h.years&&h.years[y]&&h.years[y].holidayDate)||'')>=0);
+    const noDateNote=!anyValidDate&&h.date?`<div class="alert alert--info mb-3" style="font-size:var(--text-xs)"><small>No holidayDate found for any active year slot — the day-shape projection cannot anchor the dip to the holiday weekday. Enter a Holiday date in Setup (Tab 1) for each year slot to enable the calendar-anchored model.</small></div>`:'';
+    return`
     <div class="card mb-6">
       <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
+      ${noDateNote}
       <div class="card mb-4" style="background:var(--surface-sunken)">
-        <div class="card__header"><span class="card__title" style="font-size:var(--text-sm)">Day-of-week split %</span>
-          <button class="btn btn--ghost btn--sm" onclick="resetDowSplit('${h.id}')">Reset to flat</button></div>
-        ${h.channels.map(ch=>`<div class="mb-3"><span class="badge badge--${ch} mb-2">${ch}</span>
-          <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-2);margin-top:var(--sp-2)">
-            ${DAYS.map((d,di)=>`<div>
-              <label style="font-size:9px;color:var(--text-tertiary);display:block;text-align:center">${d}</label>
-              <input type="number" value="${(h.dowSplit[ch][di]).toFixed(1)}" step="0.1" min="0" max="100"
-                style="height:28px;font-size:var(--text-xs);text-align:center"
-                oninput="setDowSplit('${h.id}','${ch}',${di},+this.value)">
-            </div>`).join('')}
-          </div>
-        </div>`).join('')}
+        <div class="card__header"><span class="card__title" style="font-size:var(--text-sm)">Day-of-week split % <span class="field-optional-hint">(manual override — editing any field locks this channel to your values)</span></span>
+          <button class="btn btn--ghost btn--sm" onclick="resetDowSplit('${h.id}')">Reset all to flat</button></div>
+        ${h.channels.map(ch=>{
+          const isManual=!!(h.dowSplitManual&&h.dowSplitManual[ch]);
+          return`<div class="mb-3">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="badge badge--${ch}">${ch}</span>
+              ${isManual?`<span style="font-size:var(--text-xs);color:var(--color-amber-700);font-weight:var(--weight-medium)">Manual override active</span><button class="btn btn--ghost btn--sm" style="font-size:var(--text-xs);padding:2px 8px;margin-left:var(--sp-1)" onclick="resetDowSplitChannel('${h.id}','${ch}')">Reset to smart projection</button>`:''}
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-2);margin-top:var(--sp-2)">
+              ${DAYS.map((d,di)=>`<div>
+                <label style="font-size:9px;color:var(--text-tertiary);display:block;text-align:center">${d}</label>
+                <input type="number" value="${(h.dowSplit[ch][di]).toFixed(1)}" step="0.1" min="0" max="100"
+                  style="height:28px;font-size:var(--text-xs);text-align:center"
+                  oninput="setDowSplit('${h.id}','${ch}',${di},+this.value)">
+              </div>`).join('')}
+            </div>
+          </div>`;
+        }).join('')}
       </div>
       ${h.channels.map(ch=>{
         const combos=h.combinations[ch]||generateCombinations(h,ch);
         const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
         if(!sel)return`<p class="t-caption">No forecast for ${ch}</p>`;
         const wkVol=sel.forecasted;
-        // For Tab 5 display, use the same split resolution as buildDailyData:
-        // per-slot holidayDowSplit if available for the selected combination's slot,
-        // else fall back to h.dowSplit[ch]. This ensures the per-day % shown in Tab 5
-        // matches the per-day volumes used by the HC calculation in Tab 6.
-        let _tab5SlotKey=null;
-        if(sel.years&&sel.years.length===1){_tab5SlotKey=sel.years[0].toLowerCase();}
-        else if(sel.years&&sel.years.length>1){
-          const _sorted=[...sel.years].sort((a,b)=>YEAR_SLOTS.indexOf(a)-YEAR_SLOTS.indexOf(b));
-          _tab5SlotKey=_sorted[0].toLowerCase();
-        }
-        const _hds5=h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?h.holidayDowSplit:null;
-        const _perSlotEntry=_tab5SlotKey&&_hds5?_hds5[_tab5SlotKey]:null;
-        // Resolve channel-specific split (mirrors buildDailyData fallback chain)
-        let splits,_useHolidaySplit;
-        if(_perSlotEntry&&!Array.isArray(_perSlotEntry)&&typeof _perSlotEntry==='object'){
-          const _chFracs=_perSlotEntry[ch];
-          _useHolidaySplit=Array.isArray(_chFracs)&&_chFracs.length===7;
-          splits=_useHolidaySplit?_chFracs:h.dowSplit[ch];
-        } else if(Array.isArray(_perSlotEntry)&&_perSlotEntry.length===7){
-          // Legacy flat array — backward compat
-          splits=_perSlotEntry;_useHolidaySplit=true;
+        // Use the same split resolution as buildDailyData so Tab 5 display exactly matches
+        // Tab 6 HC daily volumes (Tab 5 = Tab 6 identity requirement).
+        // Manual-override path: use h.dowSplit[ch] verbatim (renormalised).
+        // Decomposition path: computeHolidayShapedSplit — returns fractions summing to 1.0.
+        let splitFracs5;
+        let shapedInfo=null;
+        if(h.dowSplitManual&&h.dowSplitManual[ch]){
+          const manArr=Array.isArray(h.dowSplit[ch])&&h.dowSplit[ch].length===7?h.dowSplit[ch]:DEFAULT_DOW_SPLIT;
+          const manSum=manArr.reduce((a,b)=>a+b,0);
+          splitFracs5=manSum>0?manArr.map(v=>v/manSum):new Array(7).fill(1/7);
         } else {
-          splits=h.dowSplit[ch];_useHolidaySplit=false;
+          shapedInfo=computeHolidayShapedSplit(h,ch);
+          splitFracs5=shapedInfo.values;
         }
-        // Holiday-anchored DOW rotation (Case A and Case B only):
-        // shift the historical split so the holiday dip aligns to the plan-year holiday weekday.
-        // Case C (global h.dowSplit[ch]) is intentionally not rotated.
-        if(_useHolidaySplit&&_tab5SlotKey){
-          const _slotYearEntry=h.years&&h.years[_tab5SlotKey.toUpperCase()];
-          splits=_rotateSplitToHoliday(splits,(_slotYearEntry||{}).holidayDate||'',h.date||'');
-        }
-        const splitSum=splits.reduce((a,b)=>a+b,0);
-        const eff=splitSum>0?splits.map(s=>s/splitSum*100):splits.map(()=>100/7);
+        // Flat-base note: shown when baseSource==='flat' and no normalWeekShape is present
+        const showFlatNote=shapedInfo&&shapedInfo.baseSource==='flat'&&!(h.normalWeekShape&&Array.isArray(h.normalWeekShape[ch])&&h.normalWeekShape[ch].length===7&&h.normalWeekShape[ch].reduce((s,v)=>s+(+v||0),0)>0);
+        const flatNote=showFlatNote?`<div class="alert alert--info mb-2" style="font-size:var(--text-xs)"><small>Using a flat base week — enter a typical non-holiday week on Setup to improve weekend/holiday separation.</small></div>`:'';
+        // Badge showing data source
+        const hasHistData=_activeYearSlots().some(y=>{
+          const slotKey=y.toLowerCase();
+          const dvSlot=h.dailyVolumes&&h.dailyVolumes[slotKey];
+          if(!dvSlot)return false;
+          const arr=dvSlot[ch];
+          return Array.isArray(arr)&&arr.reduce((s,v)=>s+(v!=null?+v:0),0)>0;
+        });
+        const sourceBadge=hasHistData?`<span class="badge badge--blue" style="font-size:10px" title="Calendar-anchored holiday multiplier model">DOW: decomposition</span>`:
+          (h.dowSplitManual&&h.dowSplitManual[ch]?`<span class="badge badge--amber" style="font-size:10px" title="Manual override — edited in day-of-week split above">DOW: manual</span>`:
+          `<span class="badge badge--gray" style="font-size:10px" title="Using global day-of-week split from the controls above">DOW: global split</span>`);
         return`<div class="mb-4">
+          ${flatNote}
           <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span>
             <span class="t-caption">Weekly: <strong>${wkVol.toLocaleString()}</strong> · ${sel.combo}</span>
-            ${_useHolidaySplit?`<span class="badge badge--blue" style="font-size:10px" title="Using per-day volumes entered in the daily volume grid for slot ${_tab5SlotKey?_tab5SlotKey.toUpperCase():''}">DOW: daily grid</span>`:`<span class="badge badge--gray" style="font-size:10px" title="Using global day-of-week split from the controls above">DOW: global split</span>`}
+            ${sourceBadge}
           </div>
-          ${Math.abs(splitSum-100)>0.5&&splitSum>0?`<div class="alert alert--warning mb-2"><small>⚠️ Splits sum to ${splitSum.toFixed(1)}% — normalised automatically.</small></div>`:''}
-          ${wkVol===0?'<div class="alert alert--warning mb-2"><small>⚠️ Forecast is 0 for this channel.</small></div>':''}
+          ${wkVol===0?'<div class="alert alert--warning mb-2"><small>Forecast is 0 for this channel.</small></div>':''}
           <div class="day-volume-grid">${DAYS.map((d,di)=>{
-            const vol=Math.round(wkVol*eff[di]/100);
+            const vol=Math.round(wkVol*splitFracs5[di]);
             // Parse h.date as a local-time date to avoid UTC-offset day-shift in AMER/LATAM.
-            // new Date('yyyy-mm-dd') produces a UTC midnight date; getDay() on that returns
-            // the day in UTC, which is one day earlier in time zones west of UTC (e.g. Dec 25
-            // UTC midnight = Dec 24 local in UTC-5). Splitting on '-' and constructing with
-            // Date(year,month-1,day) uses the local calendar, giving the correct weekday.
             let dow=-1;
             if(h.date){const parts=h.date.split('-');if(parts.length===3){dow=new Date(+parts[0],+parts[1]-1,+parts[2]).getDay();}else{dow=new Date(h.date).getDay();}}
             const isHDay=h.date&&(dow===(di===0?6:di===1?0:di-1));
             return`<div class="day-vol-card ${isHDay?'holiday-day':''}">
               <div class="day-vol-card__day">${d}${isHDay?' 🎉':''}</div>
               <div class="day-vol-card__vol">${vol.toLocaleString()}</div>
-              <div class="day-vol-card__pct">${eff[di].toFixed(1)}%</div>
+              <div class="day-vol-card__pct">${(splitFracs5[di]*100).toFixed(1)}%</div>
             </div>`;
           }).join('')}</div>
         </div>`;
       }).join('')}
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
-function setDowSplit(hid,ch,di,val){const h=APP.holidays.find(x=>x.id===hid);if(h){h.dowSplit[ch][di]=val;invalidateAllCaches();renderDailyBreakdown();}}
-function resetDowSplit(hid){const h=APP.holidays.find(x=>x.id===hid);if(!h)return;CHANNELS.forEach(ch=>{h.dowSplit[ch]=[...DEFAULT_DOW_SPLIT];});invalidateAllCaches();renderDailyBreakdown();}
+function setDowSplit(hid,ch,di,val){
+  const h=APP.holidays.find(x=>x.id===hid);
+  if(!h)return;
+  h.dowSplit[ch][di]=val;
+  // Mark this channel as manually overridden
+  if(!h.dowSplitManual)h.dowSplitManual={};
+  h.dowSplitManual[ch]=true;
+  invalidateAllCaches();
+  renderDailyBreakdown();
+}
+function resetDowSplit(hid){
+  const h=APP.holidays.find(x=>x.id===hid);
+  if(!h)return;
+  CHANNELS.forEach(ch=>{
+    h.dowSplit[ch]=[...DEFAULT_DOW_SPLIT];
+    if(h.dowSplitManual)h.dowSplitManual[ch]=false;
+  });
+  invalidateAllCaches();
+  renderDailyBreakdown();
+}
+/* resetDowSplitChannel: clears the manual-override flag for a single channel,
+   restoring the decomposition model output for that channel only.
+   Resets h.dowSplit[ch] to DEFAULT_DOW_SPLIT so the inputs show clean values,
+   then re-renders to display the smart projection fractions in the day cards. */
+function resetDowSplitChannel(hid,ch){
+  const h=APP.holidays.find(x=>x.id===hid);
+  if(!h)return;
+  h.dowSplit[ch]=[...DEFAULT_DOW_SPLIT];
+  if(!h.dowSplitManual)h.dowSplitManual={};
+  h.dowSplitManual[ch]=false;
+  invalidateAllCaches();
+  renderDailyBreakdown();
+}
 
 /* ================================================================
    DAILY VOLUME GRID — 7-day expandable inputs per year slot
@@ -3186,17 +3264,157 @@ function _rotateSplitToHoliday(splitArr,slotHolidayDate,targetDate){
   return rotated;
 }
 
+/* ================================================================
+   HOLIDAY-EFFECT DECOMPOSITION MODEL — computeHolidayShapedSplit
+   Replaces the pure-rotation day-shape engine with a calendar-anchored
+   base + holiday-multiplier model.
+
+   Algorithm:
+   1. Resolve base shape (priority: normalWeekShape[ch] > non-flat dowSplit[ch] > flat 1/7).
+      Track baseSource: 'normalWeek' | 'dowSplit' | 'flat'.
+   2. Learn mult[delta] for delta in {-3..+3}:
+      For each active year slot that has both dailyVolumes and a valid holidayDate:
+        - c_y = _parseDateCol(holidayDate)  (0-based, Sat=0..Fri=6)
+        - For day d (0..6): delta = ((d - c_y + 3 + 7) % 7) - 3
+        - rawMult[delta] = (observed_frac[d] / base_frac[d])  if base_frac[d] > 0
+        - Accumulate with DAY_INDEX_WEIGHTS[y] weighting; clamp rawMult to [0.05, 5.0]
+   3. Project onto target holiday date (h.date → c_t):
+        - For day d (0..6): delta = ((d - c_t + 3 + 7) % 7) - 3
+        - shape[d] = base[d] * (mult[delta] if learned, else 1.0)
+   4. Renormalise shape to sum = 1.0.
+   5. Return {values:[7 fractions summing to 1.0], baseSource, anchored:bool}
+
+   Guards:
+   - Zero base fraction at any position: treat mult as 1.0 for that delta.
+   - Zero weightSum for a delta: mult[delta] = 1.0 (no observed data — stay at base).
+   - Missing / invalid h.date: anchored = false, mult = all 1.0 (no projection).
+   - Missing / invalid slotHolidayDate: that slot is skipped in multiplier learning.
+   - Zero weekly volume for a contributing year: skip that year (defensive).
+   - Output never contains NaN or Infinity.
+
+   Returns: {values:[7], baseSource:string, anchored:bool}
+================================================================ */
+function computeHolidayShapedSplit(h, ch){
+  // ── 1. Resolve base shape ──────────────────────────────────────────────
+  let base=null;
+  let baseSource='flat';
+  // Priority A: normalWeekShape[ch] — user-entered typical non-holiday week
+  if(h.normalWeekShape&&Array.isArray(h.normalWeekShape[ch])&&h.normalWeekShape[ch].length===7){
+    const nwArr=h.normalWeekShape[ch];
+    const nwSum=nwArr.reduce((s,v)=>s+(+v||0),0);
+    if(nwSum>0){
+      base=nwArr.map(v=>(+v||0)/nwSum);
+      baseSource='normalWeek';
+    }
+  }
+  // Priority B: non-flat dowSplit[ch] — user has customised the global split
+  if(!base&&Array.isArray(h.dowSplit&&h.dowSplit[ch])&&h.dowSplit[ch].length===7){
+    const dsArr=h.dowSplit[ch];
+    const dsSum=dsArr.reduce((s,v)=>s+(+v||0),0);
+    if(dsSum>0){
+      const dsFracs=dsArr.map(v=>(+v||0)/dsSum);
+      // Check if it's non-flat: at least one element differs from 1/7 by > 0.5pp
+      const flat1_7=1/7;
+      const isNonFlat=dsFracs.some(f=>Math.abs(f-flat1_7)>0.005);
+      if(isNonFlat){
+        base=dsFracs;
+        baseSource='dowSplit';
+      }
+    }
+  }
+  // Priority C: flat 1/7
+  if(!base){
+    base=new Array(7).fill(1/7);
+    baseSource='flat';
+  }
+
+  // ── 2. Learn holiday multipliers per delta offset ──────────────────────
+  // delta ∈ {-3,-2,-1,0,+1,+2,+3}: day relative to the holiday itself.
+  // Formula: delta = ((d - c_y + 3 + 7) % 7) - 3
+  // This maps the 7 DAYS columns bijectively onto {-3..+3}.
+  const multSum=new Array(7).fill(0);   // index i = delta+3 (i=0 → delta=-3)
+  const multWgt=new Array(7).fill(0);
+  const c_t=_parseDateCol(h.date||'');  // target holiday column
+
+  const contributing=_activeYearSlots().filter(y=>{
+    const slotKey=y.toLowerCase();
+    const dvSlot=h.dailyVolumes&&h.dailyVolumes[slotKey];
+    if(!dvSlot)return false;
+    const arr=dvSlot[ch];
+    if(!Array.isArray(arr))return false;
+    const total=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+    if(total<=0)return false;
+    // Also require a valid holidayDate so we can compute delta correctly
+    const c_y=_parseDateCol((h.years&&h.years[y]&&h.years[y].holidayDate)||'');
+    return c_y>=0;
+  });
+
+  let anchored=contributing.length>0&&c_t>=0;
+
+  contributing.forEach(y=>{
+    const w=DAY_INDEX_WEIGHTS[y]||0;
+    if(w<=0)return;
+    const slotKey=y.toLowerCase();
+    const arr=h.dailyVolumes[slotKey][ch];
+    const weekTotal=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
+    if(weekTotal<=0)return;
+    const c_y=_parseDateCol((h.years[y]||{}).holidayDate||'');
+    if(c_y<0)return;
+    // Normalised observed fracs for this year+channel
+    const obsFracs=arr.map(v=>(v!=null?+v:0)/weekTotal);
+    for(let d=0;d<7;d++){
+      const delta=((d-c_y+3+7)%7)-3; // -3..+3
+      const i=delta+3;               // 0..6 index into mult arrays
+      if(base[d]>0){
+        const rawMult=obsFracs[d]/base[d];
+        const clampedMult=Math.max(0.05,Math.min(5.0,rawMult));
+        multSum[i]+=w*clampedMult;
+      } else {
+        // Base fraction is zero: treat as neutral (mult=1.0)
+        multSum[i]+=w*1.0;
+      }
+      multWgt[i]+=w;
+    }
+  });
+
+  // Resolve final multiplier array: weighted average per delta, default 1.0 when no data
+  const mult=multSum.map((s,i)=>multWgt[i]>0?s/multWgt[i]:1.0);
+
+  // ── 3. Project onto target holiday date ──────────────────────────────
+  // If no valid target date or no contributing years, skip multiplier application
+  const shape=new Array(7);
+  if(anchored){
+    for(let d=0;d<7;d++){
+      const delta=((d-c_t+3+7)%7)-3;
+      const i=delta+3;
+      shape[d]=base[d]*(mult[i]>0?mult[i]:1.0);
+      // Guard NaN/Infinity (e.g. base=0 already handled above but add safety net)
+      if(!isFinite(shape[d])||isNaN(shape[d]))shape[d]=base[d];
+    }
+  } else {
+    // No valid target date — use base as-is (no projection)
+    for(let d=0;d<7;d++)shape[d]=base[d];
+  }
+
+  // ── 4. Renormalise to sum = 1.0 ───────────────────────────────────────
+  const shapeSum=shape.reduce((s,v)=>s+v,0);
+  let values;
+  if(shapeSum>0){
+    values=shape.map(v=>v/shapeSum);
+  } else {
+    // Defensive: all-zero shape — fall back to flat
+    values=new Array(7).fill(1/7);
+  }
+  // Final NaN guard
+  values=values.map(v=>(isFinite(v)&&!isNaN(v))?v:1/7);
+
+  return{values,baseSource,anchored};
+}
+
 function computeDayIndexForecast(h){
   const result={voice:null,chat:null,email:null};
-  // Parse the plan-year holiday column index once for all channels.
-  // c_t: 0-based column index (Sat=0..Fri=6) of the target holiday in the plan year.
-  const c_t=_parseDateCol(h.date);
   CHANNELS.forEach(ch=>{
     // Collect contributing year slots: must have at least one positive daily volume cell.
-    // Normalisation is against each year's own weekly total, not planVolume, so the index
-    // captures the day shape only. planVolume is applied at projection time.
-    // Use _activeYearSlots() so historyYears=1 limits the weighted day-index to Y1 only,
-    // consistent with generateCombinations and renderHistoricalAnalysis active-slot filtering.
     const contributing=_activeYearSlots().filter(y=>{
       const slotKey=y.toLowerCase();
       const dvSlot=h.dailyVolumes&&h.dailyVolumes[slotKey];
@@ -3208,61 +3426,15 @@ function computeDayIndexForecast(h){
     });
     if(!contributing.length){result[ch]=null;return;}
 
-    // For each contributing year, derive the 7-element day-index array (fracs summing to 1.0),
-    // apply holiday-relative cyclic rotation, then compute the weighted sum across years.
-    //
-    // ROTATION RATIONALE: The DAYS array is a Sat-anchored week column. If last year's Diwali
-    // fell on Wednesday (column 4) but this year's Diwali is on Tuesday (column 3), the
-    // Wednesday volume peak from last year should be shifted left by 1 column so it aligns
-    // with Tuesday in the projection. Rotation = (c_t - c_y + 7) % 7 positions cyclically.
-    // Wrap at week boundary is intentional for v1: a rotation that moves Saturday's volume to
-    // the prior Friday position is accepted because holidays rarely fall on consecutive
-    // day-of-week extremes, and the cyclic wrap keeps all 7 fractions summing to 1.0.
-    const weightedIndex=new Array(7).fill(0);
-    let totalWeight=0;
-    contributing.forEach(y=>{
-      const w=DAY_INDEX_WEIGHTS[y]||0;
-      if(w<=0)return;
-      const slotKey=y.toLowerCase();
-      const arr=h.dailyVolumes[slotKey][ch];
-      const weekTotal=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
-      if(weekTotal<=0)return; // guard: skip zero-total years (excluded by filter above, defensive)
+    // Use the decomposition model to get normalised fractions (summing to 1.0).
+    // computeHolidayShapedSplit handles all guards: zero base, missing dates, NaN.
+    const shaped=computeHolidayShapedSplit(h,ch);
+    const normIndex=shaped.values; // already sums to 1.0
 
-      // Build the normalised 7-element fraction array for this year+channel.
-      const fracs=arr.map(v=>(v!=null?+v:0)/weekTotal);
-
-      // Compute cyclic rotation shift: how many columns to rotate fracs to align
-      // this year's holiday column to the plan-year holiday column.
-      const c_y=_parseDateCol((h.years[y]||{}).holidayDate||'');
-      let shift=0;
-      if(c_t>=0&&c_y>=0){
-        shift=(c_t-c_y+7)%7;
-      } else {
-        // Missing or invalid date on one or both sides — no rotation applied.
-        // Log a console note so the analyst can diagnose the data gap.
-        if(c_y<0){console.info('[WFM day-shape] holidayDate absent or invalid for slot '+y+' ('+ch+') — using unrotated day-shape for this year.');}
-        shift=0;
-      }
-
-      // Apply cyclic rotation: element at position d maps to position (d+shift)%7.
-      // This shifts the pattern forward by `shift` columns within the Sat-Fri week.
-      for(let d=0;d<7;d++){
-        weightedIndex[(d+shift)%7]+=w*fracs[d];
-      }
-      totalWeight+=w;
-    });
-    if(totalWeight<=0){result[ch]=null;return;}
-
-    // Normalise weightedIndex so it sums to 1.0 (accounts for partial year-weight coverage).
-    // SINGLE-YEAR PATH GUARD: when only 1 year contributes (historyYears=1 or only Y1 has data),
-    // totalWeight = DAY_INDEX_WEIGHTS.Y1 = 0.40 and indexSum = sum(fracs)*0.40 = 1.0*0.40 = 0.40.
-    // After division each normIndex[d] = (0.40*fracs[d]) / 0.40 = fracs[d].
-    // The normalised array therefore sums to 1.0 exactly (same as the single-year fracs array).
-    // This is correct: with one year the weighted-index degrades to that year's day-shape, which
-    // already sums to 1.0 by construction. No special 1-year code path needed.
-    const indexSum=weightedIndex.reduce((s,v)=>s+v,0);
-    if(indexSum<=0){result[ch]=null;return;} // guard: no contributing weight — all slots blank
-    const normIndex=weightedIndex.map(v=>v/indexSum);
+    // Log console.info when no valid holidayDate anchoring was possible.
+    if(!shaped.anchored){
+      console.info('[WFM day-shape] No valid holidayDate found for any active year slot (ch='+ch+') — using base shape without holiday-multiplier projection.');
+    }
 
     // Projected volume per day = normalised_index[d] * planVolume[ch]
     // When planVolume[ch] > 0: return integer projected volumes.
@@ -3560,65 +3732,32 @@ function buildDailyData(h,ch){
   const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
   if(!sel)return{days:[],hitCap:false};
   const wkVol=sel.forecasted||0;
-  // holidayDowSplit fallback logic (per-slot, per-channel):
-  // The selected combination determines which year slot's forecast is used.
-  // When a single year slot was selected (e.g. "Last Year 2025"), that slot's
-  // channel-specific dailyVolumes-derived split is used. For multi-year combinations,
-  // the most-recent slot's split is used (first in YEAR_SLOTS order).
-  // Fallback chain (per channel):
-  //   1. h.holidayDowSplit[effectiveSlotKey][ch] — channel-specific split from daily volume grid
-  //      (new per-channel structure: {voice:[7]|null, chat:[7]|null, email:[7]|null})
-  //   2. h.holidayDowSplit[effectiveSlotKey] as flat [7] — legacy blended structure (backward compat)
-  //   3. h.dowSplit[ch] — per-channel global DOW split from Tab 5 Daily Breakdown
+  // Split resolution uses the holiday-effect decomposition model (computeHolidayShapedSplit).
+  // The decomposition model uses all active year slots with valid dailyVolumes+holidayDate entries,
+  // not just the selected combination's slot — full cross-year learning for better shape accuracy.
+  // Manual-override path: when h.dowSplitManual[ch] is true, the user has hand-edited the
+  // Tab 5 split for this channel — use h.dowSplit[ch] verbatim (renormalised).
   // WFM domain: each channel uses its own DOW pattern so that channel-model fidelity is preserved:
   //   Voice → Erlang C applied with voice-specific daily volumes
   //   Chat  → concurrency model applied with chat-specific daily volumes
   //   Email → daily throughput model applied with email-specific daily volumes
-  let effectiveSlotKey=null;
-  if(sel.years&&sel.years.length===1){
-    effectiveSlotKey=sel.years[0].toLowerCase(); // e.g. 'Y1' → 'y1'
-  } else if(sel.years&&sel.years.length>1){
-    // Multi-year average: use the most-recent (lowest index) year's slot split.
-    const sorted=[...sel.years].sort((a,b)=>YEAR_SLOTS.indexOf(a)-YEAR_SLOTS.indexOf(b));
-    effectiveSlotKey=sorted[0].toLowerCase();
-  }
-  // Resolve the per-slot entry from holidayDowSplit
-  const _hds=h.holidayDowSplit&&typeof h.holidayDowSplit==='object'&&!Array.isArray(h.holidayDowSplit)?h.holidayDowSplit:null;
-  const perSlotEntry=effectiveSlotKey&&_hds?_hds[effectiveSlotKey]:null;
-  // Channel-specific split resolution:
-  // Case A: new per-channel structure — perSlotEntry is {voice, chat, email}
-  // Case B: legacy flat array — treat as shared blended split (backward compatibility)
-  // Case C: null — fall back to h.dowSplit[ch]
-  let splits;
-  let _usedHolidaySplitBDD=false;
-  if(perSlotEntry&&!Array.isArray(perSlotEntry)&&typeof perSlotEntry==='object'){
-    // Case A: per-channel object — read channel-specific array; fall back to h.dowSplit[ch] if null
-    const chFracs=perSlotEntry[ch];
-    const _chValid=Array.isArray(chFracs)&&chFracs.length===7;
-    splits=_chValid?chFracs:h.dowSplit[ch];
-    _usedHolidaySplitBDD=_chValid;
-  } else if(Array.isArray(perSlotEntry)&&perSlotEntry.length===7){
-    // Case B: legacy flat array — use as shared split (old saved plans before this fix)
-    splits=perSlotEntry;
-    _usedHolidaySplitBDD=true;
+  let splitFracs; // 7-element array of fractions summing to 1.0
+  if(h.dowSplitManual&&h.dowSplitManual[ch]){
+    // Manual override: use h.dowSplit[ch] verbatim (renormalise to sum=1.0)
+    const manArr=Array.isArray(h.dowSplit[ch])&&h.dowSplit[ch].length===7?h.dowSplit[ch]:DEFAULT_DOW_SPLIT;
+    const manSum=manArr.reduce((a,b)=>a+b,0);
+    splitFracs=manSum>0?manArr.map(v=>v/manSum):new Array(7).fill(1/7);
   } else {
-    // Case C: no per-slot split — use global per-channel DOW split
-    splits=h.dowSplit[ch];
+    // Decomposition model: learns holiday multipliers from historical dailyVolumes
+    const shaped=computeHolidayShapedSplit(h,ch);
+    splitFracs=shaped.values; // already sums to 1.0, no NaN/Infinity
   }
-  // Holiday-anchored DOW rotation (Case A and Case B only):
-  // shift the historical split so the holiday dip aligns to the plan-year holiday weekday.
-  // Case C (global h.dowSplit[ch]) is intentionally not rotated.
-  if(_usedHolidaySplitBDD&&effectiveSlotKey){
-    const _bddYearEntry=h.years&&h.years[effectiveSlotKey.toUpperCase()];
-    splits=_rotateSplitToHoliday(splits,(_bddYearEntry||{}).holidayDate||'',h.date||'');
-  }
-  const splitSum=splits.reduce((a,b)=>a+b,0);
   const opStart=h.operatingHoursOverride?h.operatingHours.start:APP.config.defaultStart;
   const opEnd=h.operatingHoursOverride?h.operatingHours.end:APP.config.defaultEnd;
   let anyCapHit=false;
   const days=DAYS.map((d,di)=>{
-    const pct=splitSum>0?splits[di]/splitSum*100:100/7;
-    const vol=Math.round(wkVol*pct/100);
+    // splitFracs already sums to 1.0 — no splitSum normalisation required
+    const vol=Math.round(wkVol*splitFracs[di]);
     const{intervals,hitCap}=computeIntervals(vol,ch,opStart,opEnd);
     if(hitCap)anyCapHit=true;
     const peakNet=intervals.length?Math.max(...intervals.map(i=>i.netHC)):0;
@@ -4699,6 +4838,24 @@ function migrateAppHolidays(){
     if(!h.forecastOverride||typeof h.forecastOverride!=='object'||Array.isArray(h.forecastOverride)){
       h.forecastOverride={};
     }
+    // Ensure normalWeekShape exists — added in v2.2; absent in plans saved before this version.
+    // null per channel is the correct default (fallback chain proceeds normally).
+    if(!h.normalWeekShape||typeof h.normalWeekShape!=='object'||Array.isArray(h.normalWeekShape)){
+      h.normalWeekShape={voice:null,chat:null,email:null,blended:null};
+    } else {
+      ['voice','chat','email','blended'].forEach(ch=>{
+        const arr=h.normalWeekShape[ch];
+        if(!Array.isArray(arr)||arr.length!==7){h.normalWeekShape[ch]=null;}
+      });
+    }
+    // Ensure dowSplitManual exists — added in v2.2; absent in old plans means no manual override.
+    if(!h.dowSplitManual||typeof h.dowSplitManual!=='object'||Array.isArray(h.dowSplitManual)){
+      h.dowSplitManual={voice:false,chat:false,email:false,blended:false};
+    } else {
+      ['voice','chat','email','blended'].forEach(ch=>{
+        if(typeof h.dowSplitManual[ch]!=='boolean')h.dowSplitManual[ch]=false;
+      });
+    }
   });
 }
 
@@ -5141,6 +5298,26 @@ function loadFromJSON(d){
       }
       // Legacy flat array or null: nh.holidayDowSplit already initialised as per-slot
       // null map by newHoliday() — no action needed.
+
+      // Restore normalWeekShape — absent in plans saved before this schema version.
+      // Absent field → null per channel (fallback chain proceeds in computeHolidayShapedSplit).
+      if(h.normalWeekShape&&typeof h.normalWeekShape==='object'&&!Array.isArray(h.normalWeekShape)){
+        ['voice','chat','email','blended'].forEach(ch=>{
+          const arr=h.normalWeekShape[ch];
+          if(Array.isArray(arr)&&arr.length===7){
+            const ss=arr.reduce((a,b)=>a+(+b||0),0);
+            nh.normalWeekShape[ch]=(ss>0)?arr:null;
+          } else {
+            nh.normalWeekShape[ch]=null;
+          }
+        });
+      }
+      // Restore dowSplitManual — absent in old plans means no manual override was set.
+      if(h.dowSplitManual&&typeof h.dowSplitManual==='object'&&!Array.isArray(h.dowSplitManual)){
+        ['voice','chat','email','blended'].forEach(ch=>{
+          nh.dowSplitManual[ch]=!!(h.dowSplitManual[ch]);
+        });
+      }
       return nh;
     });
   }
