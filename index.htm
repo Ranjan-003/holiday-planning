@@ -3097,8 +3097,8 @@ function renderDailyBreakdown(){
           const arr=dvSlot[ch];
           return Array.isArray(arr)&&arr.reduce((s,v)=>s+(v!=null?+v:0),0)>0;
         });
-        const sourceBadge=hasHistData?`<span class="badge badge--blue" style="font-size:10px" title="Calendar-anchored holiday multiplier model">DOW: decomposition</span>`:
-          (h.dowSplitManual&&h.dowSplitManual[ch]?`<span class="badge badge--amber" style="font-size:10px" title="Manual override — edited in day-of-week split above">DOW: manual</span>`:
+        const sourceBadge=(h.dowSplitManual&&h.dowSplitManual[ch])?`<span class="badge badge--amber" style="font-size:10px" title="Manual override — edited in day-of-week split above">DOW: manual</span>`:
+          (hasHistData?`<span class="badge badge--blue" style="font-size:10px" title="Calendar-anchored holiday multiplier model">DOW: decomposition</span>`:
           `<span class="badge badge--gray" style="font-size:10px" title="Using global day-of-week split from the controls above">DOW: global split</span>`);
         return`<div class="mb-4">
           ${flatNote}
