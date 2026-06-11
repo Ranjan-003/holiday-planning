@@ -165,6 +165,24 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
 .plan-list-item{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-3) var(--sp-4);border-radius:var(--radius-md);border:1px solid var(--border-subtle);margin-bottom:var(--sp-2);cursor:pointer;transition:background var(--transition-fast)}
 .plan-list-item:hover{background:var(--surface-sunken)}
 .holiday-year-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:var(--sp-4)}
+/* ── Year slot visibility ── */
+.year-block.hist-slot-hidden{display:none}
+/* ── Hidden-slot data note ── */
+.hist-slot-hidden-note{background:var(--color-amber-50);border:1px solid var(--color-amber-100);border-radius:var(--radius-md);padding:var(--sp-2) var(--sp-3);font-size:var(--text-xs);color:var(--color-amber-700);margin-top:var(--sp-2)}
+/* ── Plan Readiness panel ── */
+.readiness-panel{background:var(--surface-card);border:1px solid var(--border-subtle);border-radius:var(--radius-lg);padding:var(--sp-4) var(--sp-5);margin-bottom:var(--sp-5);box-shadow:var(--shadow-sm)}
+.readiness-panel__title{font-size:var(--text-sm);font-weight:var(--weight-semibold);color:var(--text-secondary);text-transform:uppercase;letter-spacing:.06em;margin-bottom:var(--sp-3)}
+.readiness-item{display:flex;align-items:flex-start;gap:var(--sp-2);padding:var(--sp-2) 0;border-bottom:1px solid var(--border-subtle);font-size:var(--text-sm)}
+.readiness-item:last-child{border-bottom:none}
+.readiness-item__icon{font-size:14px;flex-shrink:0;margin-top:1px}
+.readiness-item__text{flex:1;color:var(--text-primary)}
+.readiness-item__hint{font-size:var(--text-xs);color:var(--text-tertiary);margin-top:2px}
+.readiness-ready{background:var(--color-green-50);border:1px solid var(--color-green-100);border-radius:var(--radius-lg);padding:var(--sp-3) var(--sp-5);display:flex;align-items:center;gap:var(--sp-2);font-size:var(--text-sm);font-weight:var(--weight-medium);color:var(--color-green-700)}
+/* ── Required / Optional field hints ── */
+.field-required-hint{font-size:var(--text-xs);color:var(--color-red-500);font-weight:var(--weight-medium);margin-left:var(--sp-1)}
+.field-optional-hint{font-size:var(--text-xs);color:var(--text-tertiary);margin-left:var(--sp-1)}
+/* ── Staffing placeholder cell (explained gap) ── */
+.staffing-placeholder{color:var(--color-amber-600);font-size:var(--text-xs);font-style:italic}
 </style>
 </head>
 <body>
@@ -309,6 +327,30 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
   </div>
   <!-- Holiday planning content — hidden until queue confirmed -->
   <div id="holidayPlanningContent" style="display:none">
+
+  <!-- ── Plan Readiness Panel ── -->
+  <div id="readinessPanel" class="readiness-panel"></div>
+
+  <!-- ── History years selector (shown above the historical data section) ── -->
+  <div class="card mb-4" id="historyYearsCard" style="display:none">
+    <div class="card__header">
+      <span class="card__title">Years of holiday history</span>
+      <span class="t-caption">How many prior year slots to display in the historical data section below</span>
+    </div>
+    <div class="form-group" style="max-width:200px">
+      <label class="form-label">History slots <span class="field-required-hint">required</span></label>
+      <select id="historyYearsSelect" onchange="setHistoryYears(+this.value)">
+        <option value="1">1 year (Y1 only)</option>
+        <option value="2">2 years (Y1–Y2)</option>
+        <option value="3">3 years (Y1–Y3)</option>
+        <option value="4">4 years (Y1–Y4)</option>
+        <option value="5">5 years (Y1–Y5)</option>
+      </select>
+      <div class="form-hint">Y1 = most recent year. Adding more years improves YoY trend confidence.</div>
+    </div>
+    <div id="historyYearsHiddenNote" style="display:none"></div>
+  </div>
+
   <div class="layout-cols">
     <div>
       <div class="section-header">
@@ -352,7 +394,7 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
       <!-- Shrinkage -->
       <div class="card mb-4">
         <div class="card__header">
-          <span class="card__title">Shrinkage build-up</span>
+          <span class="card__title">Shrinkage build-up <span class="field-required-hint">required</span></span>
           <span class="badge badge--gray" id="totalShrinkageBadge">Total: 0%</span>
         </div>
         <div class="form-group mb-3">
@@ -373,7 +415,7 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
 
       <!-- SL Targets & AHT -->
       <div class="card mb-4">
-        <div class="card__header"><span class="card__title">Service level targets &amp; AHT</span></div>
+        <div class="card__header"><span class="card__title">Service level targets &amp; AHT <span class="field-required-hint">required</span></span></div>
         <div class="form-group mb-3">
           <label class="form-label">Voice — % answered within (sec) · AHT · Concurrency</label>
           <div style="display:grid;grid-template-columns:55px auto 70px auto 80px auto 90px;gap:var(--sp-2);align-items:center">
@@ -433,7 +475,7 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
         <div id="ahtError" class="form-error hidden">AHT must be at least 1 second for all channels.</div>
         <!-- FIX 3: Blended split configuration — three-way Voice/Chat/Email -->
         <div class="form-group">
-          <label class="form-label">Blended channel — voice / chat / email split %</label>
+          <label class="form-label">Blended channel — voice / chat / email split % <span class="field-optional-hint">optional — only needed for Blended holidays</span></label>
           <div style="display:grid;grid-template-columns:1fr auto 1fr auto 1fr;gap:var(--sp-3);align-items:center">
             <div>
               <label style="font-size:10px;color:var(--ch-voice)">Voice %</label>
@@ -458,7 +500,7 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
 
       <!-- Anomaly threshold -->
       <div class="card">
-        <div class="card__header"><span class="card__title">Anomaly detection threshold</span></div>
+        <div class="card__header"><span class="card__title">Anomaly detection threshold <span class="field-optional-hint">optional</span></span></div>
         <div class="form-group">
           <label class="form-label">Auto-flag if deviation &gt; N standard deviations</label>
           <input type="number" id="anomalyThreshold" value="2" min="1" max="5" step="0.5">
@@ -704,12 +746,167 @@ let APP={
     blendedVoicePct:50,
     blendedChatPct:30,
     blendedEmailPct:20,
-    anomalyThreshold:2
+    anomalyThreshold:2,
+    historyYears:1
   },
   backendOnline:false
 };
 /* pending Excel parse result, held until user confirms in import modal */
 let _pendingImport=null;
+
+/* ================================================================
+   HISTORY YEARS — flexible 1–5 slot model
+================================================================ */
+/* _activeYearSlots: returns the subset of YEAR_SLOTS that are currently active
+   based on APP.config.historyYears. Always returns at least ['Y1'].
+   Example: historyYears=2 → ['Y1','Y2']. */
+function _activeYearSlots(){
+  const n=Math.max(1,Math.min(5,APP.config.historyYears||1));
+  return YEAR_SLOTS.slice(0,n);
+}
+
+/* setHistoryYears: updates APP.config.historyYears and applies slot visibility
+   to all currently-rendered holiday cards.
+   Does NOT delete data — hidden slots remain in APP.holidays[*].years.
+   Shows an inline note when a slot has data but is being hidden. */
+function setHistoryYears(n){
+  n=Math.max(1,Math.min(5,n||1));
+  APP.config.historyYears=n;
+  // Update select control to reflect the change (may be called programmatically)
+  const sel=document.getElementById('historyYearsSelect');
+  if(sel)sel.value=String(n);
+  // Apply visibility to every year-block in every holiday card
+  _applyYearSlotVisibility();
+  // Rebuild hidden-slot note
+  _updateHiddenSlotNote();
+  // Re-evaluate readiness (plan volume and historical data criticals depend on active slots)
+  renderReadinessPanel();
+  invalidateAllCaches();
+}
+
+/* _applyYearSlotVisibility: hides year-block elements for slots beyond historyYears.
+   Called after setHistoryYears and after renderHolidayList. */
+function _applyYearSlotVisibility(){
+  const n=Math.max(1,Math.min(5,APP.config.historyYears||1));
+  YEAR_SLOTS.forEach((y,i)=>{
+    // Each year-block has id derived from its position via renderHolidayList's YEAR_SLOTS.map.
+    // We use class selectors rather than IDs because there are multiple holiday cards,
+    // each with its own year block. Target all .year-block elements inside .hist-data-grid
+    // by data-year-slot attribute (set in renderHolidayList template).
+    document.querySelectorAll(`.year-block[data-year-slot="${y}"]`).forEach(el=>{
+      if(i<n){el.classList.remove('hist-slot-hidden');}
+      else{el.classList.add('hist-slot-hidden');}
+    });
+  });
+}
+
+/* _updateHiddenSlotNote: checks if any hidden slot has non-zero actual data.
+   If so, shows an amber note above the historical grid. */
+function _updateHiddenSlotNote(){
+  const noteEl=document.getElementById('historyYearsHiddenNote');
+  if(!noteEl)return;
+  const n=APP.config.historyYears||1;
+  if(n>=5){noteEl.style.display='none';noteEl.innerHTML='';return;}
+  const hiddenSlots=YEAR_SLOTS.slice(n);
+  const slotsWithData=[];
+  hiddenSlots.forEach(y=>{
+    const hasData=(APP.holidays||[]).some(h=>{
+      const yr=h.years&&h.years[y];if(!yr)return false;
+      return CHANNELS.some(ch=>(yr.actual&&yr.actual[ch]>0));
+    });
+    if(hasData)slotsWithData.push(y);
+  });
+  if(slotsWithData.length){
+    noteEl.style.display='block';
+    noteEl.innerHTML=slotsWithData.map(y=>`<div class="hist-slot-hidden-note">Y${YEAR_SLOTS.indexOf(y)+1} has data but is hidden — increase <strong>Years of holiday history</strong> to include it.</div>`).join('');
+  } else {
+    noteEl.style.display='none';
+    noteEl.innerHTML='';
+  }
+}
+
+/* ================================================================
+   PLAN READINESS PANEL
+   Evaluates 4 critical items. All SOFT — never blocks navigation.
+   Renders into #readinessPanel on Tab 1.
+================================================================ */
+function renderReadinessPanel(){
+  const el=document.getElementById('readinessPanel');
+  if(!el)return;
+
+  const activeSlots=_activeYearSlots();
+  const items=[];
+
+  // 1. At least 1 year of holiday actual volume per active channel
+  const hasActuals=(APP.holidays||[]).length===0?false:APP.holidays.some(h=>{
+    return (h.channels||[]).some(ch=>{
+      return activeSlots.some(y=>h.years&&h.years[y]&&(h.years[y].actual[ch]||0)>0);
+    });
+  });
+  if(!hasActuals){
+    items.push({
+      label:'Historical actual volume',
+      hint:'Go to Tab 1 → expand a holiday → enter actual volume for at least one year slot (Y1 = most recent) for each active channel.',
+      critical:true
+    });
+  }
+
+  // 2. AHT target per active channel
+  const activeChs=new Set();
+  (APP.holidays||[]).forEach(h=>(h.channels||[]).forEach(ch=>{if(ch!=='blended')activeChs.add(ch);}));
+  const missingAHT=[];
+  activeChs.forEach(ch=>{
+    const ahtSec=APP.config.aht&&APP.config.aht[ch];
+    if(!ahtSec||ahtSec<1)missingAHT.push(ch);
+  });
+  if(missingAHT.length){
+    items.push({
+      label:`AHT not set for: ${missingAHT.join(', ')}`,
+      hint:'Go to Tab 1 → "Service level targets & AHT" → enter a valid AHT (>0) for each channel.',
+      critical:true
+    });
+  }
+
+  // 3. Shrinkage targets (compound must be > 0 to produce gross HC)
+  const shrink=APP.config.shrink;
+  const shrinkTotal=shrink?shrink.total:0;
+  const shrinkZero=shrinkTotal===0||((!shrink?.pl||shrink.pl===0)&&(!shrink?.ul||shrink.ul===0)&&(!shrink?.tr||shrink.tr===0));
+  if(shrinkZero){
+    items.push({
+      label:'Shrinkage not configured (all components = 0%)',
+      hint:'Go to Tab 1 → "Shrinkage build-up" → enter Planned Leave, Unplanned Leave, and Training %. Gross HC = Net HC when shrinkage is 0.',
+      critical:true,
+      shrinkWarn:true
+    });
+  }
+
+  // 4. Channel selection + plan volume for at least one holiday
+  const hasChannelAndVolume=(APP.holidays||[]).some(h=>{
+    if(!(h.channels&&h.channels.length))return false;
+    return (h.channels||[]).some(ch=>ch!=='blended'?((h.planVolume&&h.planVolume[ch])||0)>0:(h.planVolume&&h.planVolume.blended||0)>0);
+  });
+  if(!hasChannelAndVolume){
+    items.push({
+      label:'Plan volume not entered',
+      hint:'Go to Tab 1 → each holiday → set Plan Volume (weekly) for each active channel. This is used as the forecast baseline in Tab 3 Combinations.',
+      critical:true
+    });
+  }
+
+  if(!items.length){
+    el.innerHTML=`<div class="readiness-ready"><span>&#10003;</span><span>Plan is ready — all critical inputs are entered. Continue to Tab 2 for historical analysis.</span></div>`;
+    return;
+  }
+
+  el.innerHTML=`<div class="readiness-panel__title">Plan Readiness — ${items.length} item${items.length>1?'s':''} need attention</div>`+
+    items.map(it=>`<div class="readiness-item">
+      <span class="readiness-item__icon">&#9888;</span>
+      <div>
+        <div class="readiness-item__text">${escHtml(it.label)}</div>
+        <div class="readiness-item__hint">${escHtml(it.hint)}${it.shrinkWarn?' Staffing output on Tab 5 will show NET requirement only until shrinkage is entered.':''}</div>
+      </div>
+    </div>`).join('');
+}
 
 /* ================================================================
    YEAR LABEL HELPERS
@@ -924,6 +1121,17 @@ async function restoreQueuePlan(planKey){
   // Deep-merge config preserving shrink components (Issue 3 + 5)
   const restored=p.config||{};
   APP.config=Object.assign({},APP.config,restored);
+  // historyYears migration: if absent in saved plan, infer from count of non-empty year slots
+  // (slots that have at least one holiday with actual volume > 0 for any channel).
+  if(restored.historyYears==null){
+    let inferred=1;
+    for(let i=YEAR_SLOTS.length-1;i>=0;i--){
+      const y=YEAR_SLOTS[i];
+      const hasData=(APP.holidays||[]).some(h=>CHANNELS.some(ch=>(h.years&&h.years[y]&&h.years[y].actual&&h.years[y].actual[ch]>0)));
+      if(hasData){inferred=i+1;break;}
+    }
+    APP.config.historyYears=Math.max(1,Math.min(5,inferred));
+  }
   // Always re-derive compound total from components to prevent stale blended value
   if(restored.shrink&&restored.shrink.pl!=null){
     const{pl,ul,tr}=restored.shrink;
@@ -1091,6 +1299,9 @@ function restoreFormFromConfig(){
   document.getElementById('slEmailPct').value=cfg.sl?.emailPct??95;
   document.getElementById('slEmailHrs').value=cfg.sl?.emailHrs??4;
   document.getElementById('anomalyThreshold').value=cfg.anomalyThreshold??2;
+  // Restore historyYears selector
+  const _hySel=document.getElementById('historyYearsSelect');
+  if(_hySel&&cfg.historyYears)_hySel.value=String(Math.max(1,Math.min(5,cfg.historyYears||1)));
   updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();validateEmailOccupancy();
 }
 let hcCache={};
@@ -1544,6 +1755,7 @@ function validateAHT(){
   if(v<1||c<1||e<1||displayInvalid){errEl.classList.remove('hidden');}
   else{errEl.classList.add('hidden');}
   APP.config.aht={voice:Math.max(1,v),chat:Math.max(1,c),email:Math.max(1,e)};
+  renderReadinessPanel();
 }
 function validateEmailOccupancy(){
   // Enforce a practical minimum of 20% — below this, email HC results are
@@ -1751,6 +1963,12 @@ function computeIntervals(dailyVol,channel,opStart,opEnd){
    CACHE INVALIDATION
 ================================================================ */
 function invalidateAllCaches(){
+  // Defer readiness panel update so it picks up the freshest APP state.
+  // Use setTimeout(0) to batch rapid successive calls (e.g. oninput on sliders)
+  // into a single render at the end of the current event loop tick.
+  if(!invalidateAllCaches._rpTimer){
+    invalidateAllCaches._rpTimer=setTimeout(()=>{invalidateAllCaches._rpTimer=null;renderReadinessPanel();},0);
+  }
   hcCache={};
   const cfg=APP.config;
   cfg.defaultStart=document.getElementById('defaultStart').value;
@@ -1828,6 +2046,7 @@ function updateShrinkage(){
   APP.config.shrink={pl,ul,tr,total};
   document.getElementById('totalShrinkageBadge').textContent=`Total: ${total.toFixed(1)}%`;
   invalidateAllCaches();
+  renderReadinessPanel();
 }
 
 /* ================================================================
@@ -2031,7 +2250,10 @@ function renderHolidayList(resetPage){
           const showMismatch=!_isBlendedOnly&&grandTotal>0&&slotActualTotal>0&&Math.abs(grandTotal-slotActualTotal)/slotActualTotal>0.01;
           // Y5 spans full width in the 2-column hist-data-grid to avoid an orphaned blank right cell
           const _y5Span=y==='Y5'?'grid-column:1/-1;':'';
-          return`<div class="year-block" style="${_y5Span}">
+          // Apply hidden class to slots beyond historyYears at render time
+          const _slotIdx=YEAR_SLOTS.indexOf(y);
+          const _slotHidden=_slotIdx>=(APP.config.historyYears||1);
+          return`<div class="year-block${_slotHidden?' hist-slot-hidden':''}" style="${_y5Span}" data-year-slot="${y}">
           <div class="year-block__label">${getYearLabel(y)}</div>
           <input type="number" placeholder="Calendar year" value="${(h.years[y]||{}).year||''}"
             oninput="setHVal('${h.id}','years.${y}.year',this.value)">
@@ -2172,6 +2394,13 @@ function renderHolidayList(resetPage){
   // panel is open. Call _syncForecastSectionVisibility for each visible holiday so that
   // holidays loaded from a plan with open panels display their forecast section correctly.
   visibleHolidays.forEach(h=>_syncForecastSectionVisibility(h.id));
+  // Show/hide history-years card and sync its select control value
+  const _hyCard=document.getElementById('historyYearsCard');
+  if(_hyCard)_hyCard.style.display=APP.holidays.length?'':'none';
+  const _hySel=document.getElementById('historyYearsSelect');
+  if(_hySel)_hySel.value=String(Math.max(1,Math.min(5,APP.config.historyYears||1)));
+  _updateHiddenSlotNote();
+  renderReadinessPanel();
 }
 
 function addHoliday(){APP.holidays.push(newHoliday('h'+Date.now()));renderHolidayList();}
@@ -2197,9 +2426,11 @@ function computeImpact(actual,baseline){if(!baseline||baseline===0)return null;r
    Ordered from most recent (Y1) to oldest populated slot.
    YoY = (act[y] - act[next-older]) / act[next-older] * 100.
    The oldest populated slot has no prior year — it is the baseline and is excluded.
-   Returns [] when fewer than 2 populated slots exist. */
+   Returns [] when fewer than 2 populated slots exist (generateCombinations handles the single-year path separately). */
 function _computeYoYSeries(h,ch){
-  const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+  // Use _activeYearSlots() so historyYears=1 restricts computation to Y1 only,
+  // preventing hidden slots from contributing to the YoY series.
+  const populated=_activeYearSlots().filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
   if(populated.length<2)return[];
   const series=[];
   for(let i=0;i<populated.length-1;i++){
@@ -2218,12 +2449,13 @@ function detectAnomalies(h){
   const activeChannels=h.channels&&h.channels.length?h.channels:['voice'];
   let detectionChannel=null;
   if(activeChannels.includes('voice')){
-    const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.voice||0)>0);
+    // Use _activeYearSlots() to respect historyYears — hidden slots are excluded.
+    const populated=_activeYearSlots().filter(y=>(h.years[y]?.actual?.voice||0)>0);
     if(populated.length>=2)detectionChannel='voice';
   }
   if(!detectionChannel){
     for(const ch of activeChannels){
-      const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+      const populated=_activeYearSlots().filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
       if(populated.length>=2){detectionChannel=ch;break;}
     }
   }
@@ -2277,7 +2509,8 @@ function renderHistoricalAnalysis(){
       <div class="card__subtitle">${h.date||'No date'} &nbsp;·&nbsp; <span class="badge badge--${h.planSource==='WFM Forecast'?'blue':'purple'}">${h.planSource}</span></div></div></div>
       ${CHANNELS.filter(ch=>h.channels.includes(ch)).map(ch=>{
         // Only render rows where actual volume > 0 for this channel.
-        const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+        // Use _activeYearSlots() so historyYears selector controls which slots appear in Tab 2.
+        const populated=_activeYearSlots().filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
         if(!populated.length){
           return`<div class="mb-4">
             <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
@@ -2294,6 +2527,9 @@ function renderHistoricalAnalysis(){
         yoySeries.forEach(({year,yoy})=>{yoyMap[year]=yoy;});
         // The oldest populated slot is the baseline year — no YoY possible.
         const oldestSlot=populated[populated.length-1];
+        // Single-year baseline info note — calm, non-blocking
+        const _singleYearNote=populated.length===1?`<div class="alert alert--info mb-3"><small>Single-year baseline — year-over-year trend needs &#8805;2 years. Projection uses last year&#8217;s holiday-week DOW pattern, re-anchored to this year&#8217;s holiday weekday. Add a second year slot on the Setup tab to enable YoY trend analysis.</small></div>`:'';
+
 
         // ── PRIMARY TABLE: YoY holiday-vs-holiday change ──
         const primaryTable=`<div class="table-wrap"><table class="data-table">
@@ -2378,6 +2614,7 @@ function renderHistoricalAnalysis(){
 
         return`<div class="mb-4">
           <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
+          ${_singleYearNote}
           ${primaryTable}
           ${bauSection}
         </div>`;
@@ -2412,7 +2649,11 @@ function generateCombinations(h,ch){
   const planVol=h.planVolume[ch]||0;
 
   // Build the YoY map for this channel (same logic as _computeYoYSeries).
-  const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+  // Use _activeYearSlots() so historyYears=1 restricts to Y1 only, ensuring the
+  // single-year baseline path is reached when the control is set to 1 year even
+  // if Y2..Y5 contain data. This is the authoritative fix for the cycle-1 Amber:
+  // YEAR_SLOTS.filter would bypass the single-year path whenever multi-year data exists.
+  const populated=_activeYearSlots().filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
   // yoyMap[y] = yoy pct for each slot except the oldest (baseline year).
   const yoyMap={};
   for(let i=0;i<populated.length-1;i++){
@@ -2426,7 +2667,22 @@ function generateCombinations(h,ch){
   // Available slots: those with a defined YoY value (excludes oldest baseline slot).
   const avail=Object.keys(yoyMap).filter(y=>yoyMap[y]!=null);
   if(!avail.length){
-    // Fewer than 2 populated slots — cannot compute YoY. Return empty.
+    // Single-year baseline path: fewer than 2 populated slots — cannot compute YoY.
+    // Produce a single "baseline year" combo using 0% YoY (plan volume passed through unchanged).
+    // The day-shape is derived from this year's historical daily volumes via computeDayIndexForecast.
+    // WFM rationale: with only one year, the analyst's best estimate is last year's holiday
+    // pattern re-anchored to this year's weekday (via computeDayIndexForecast rotation).
+    // No YoY trend is applied because there is no second year to compute a change against.
+    if(populated.length===1){
+      const singleY=populated[0];
+      const singleAct=h.years[singleY].actual[ch]||0;
+      const forecasted=planVol>0?planVol:0;
+      const{score,breakdown}=scoreCombo([singleY],[0],{}); // impact 0 for baseline year
+      const name=getYearLabel(singleY);
+      return[{combo:name,years:[singleY],impacts:[0],blendedImpact:0,forecasted,
+        hasAnomaly:false,score,breakdown,selected:false,recommended:true,
+        _singleYearBaseline:true}];
+    }
     return[];
   }
   const aFlags={...h.autoAnomalyFlags,...h.manualAnomalyOverrides};
@@ -2622,6 +2878,15 @@ function renderCombinations(){
     <div class="card mb-6">
       <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
       ${h.channels.map(ch=>{
+        // Guard: AHT must be >= 1s for staffing output to be meaningful.
+        // If missing, show explained placeholder instead of combination table.
+        const _ahtForCh=ch==='blended'?APP.config.aht.voice:(APP.config.aht[ch]||0);
+        if(ch!=='blended'&&_ahtForCh<1){
+          return`<div class="mb-4">
+            <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
+            <div class="alert alert--warning"><small><span class="staffing-placeholder">AHT not entered for ${ch} — staffing unavailable. Go to Tab 1 &#8594; &#8220;Service level targets &amp; AHT&#8221; and enter a valid AHT to enable combinations for this channel.</span></small></div>
+          </div>`;
+        }
         const combos=generateCombinations(h,ch);
         h.combinations[ch]=combos;
         const prevSel=h.selectedCombos[ch];
@@ -2632,10 +2897,11 @@ function renderCombinations(){
             <span class="t-caption">Plan: ${(h.planVolume[ch]||0).toLocaleString()} · ${h.planSource}</span></div>
           ${(()=>{if(!combos.length){
             // Diagnose why no combinations were produced so the user can take action.
-            // Combinations require at least 2 year slots with actual volume > 0 (to compute YoY).
-            const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
-            if(!populated.length)return'<div class="alert alert--warning"><small>No '+ch+' actual volumes entered — go to Setup (Tab 1) and enter Actual volume for at least two year slots (Y1 = most recent). Combinations use YoY change between consecutive years.</small></div>';
-            if(populated.length<2)return'<div class="alert alert--warning"><small>Only one year of '+ch+' actuals entered — YoY combinations require at least two years. Add a second year slot on the Setup tab.</small></div>';
+            // With 1 year: single-year baseline projection is produced in generateCombinations.
+            // With 0 years: show guidance to enter historical data.
+            // Use _activeYearSlots() for consistency with the combination engine's scope.
+            const populated=_activeYearSlots().filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+            if(!populated.length)return'<div class="alert alert--warning"><small>No '+ch+' actual volumes entered — go to Setup (Tab 1) and enter Actual volume for at least one year slot (Y1 = most recent).</small></div>';
             return'<div class="alert alert--warning"><small>No valid combinations — check that the calendar year field is filled in for each year slot on the Setup tab.</small></div>';
           }return null;})()??`
           <div style="display:grid;grid-template-columns:180px 90px 130px 1fr 80px 60px;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);margin-bottom:var(--sp-1)">
@@ -2695,9 +2961,9 @@ function renderRecommendation(){
           const rec=combos.find(c=>c.recommended)||combos[0];
           if(!sel){
             // No combinations — diagnose for the user. YoY combinations need ≥2 year slots with actuals.
-            const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
-            if(!populated.length)return`<div class="alert alert--warning"><small>No ${ch} actuals — go to Tab 1 Setup and enter Actual volume for at least two year slots.</small></div>`;
-            if(populated.length<2)return`<div class="alert alert--warning"><small>Only one year of ${ch} actuals entered — YoY combinations require at least two years. Add a second year slot on the Setup tab.</small></div>`;
+            // Use _activeYearSlots() so diagnostic respects the historyYears selector.
+            const populated=_activeYearSlots().filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+            if(!populated.length)return`<div class="alert alert--warning"><small>No ${ch} actuals — go to Tab 1 Setup and enter Actual volume for at least one year slot (Y1 = most recent).</small></div>`;
             return`<div class="alert alert--warning"><small>No combinations for ${ch} — check historical data and year fields on Tab 1.</small></div>`;
           }
           return`<div>
@@ -2899,7 +3165,9 @@ function computeDayIndexForecast(h){
     // Collect contributing year slots: must have at least one positive daily volume cell.
     // Normalisation is against each year's own weekly total, not planVolume, so the index
     // captures the day shape only. planVolume is applied at projection time.
-    const contributing=YEAR_SLOTS.filter(y=>{
+    // Use _activeYearSlots() so historyYears=1 limits the weighted day-index to Y1 only,
+    // consistent with generateCombinations and renderHistoricalAnalysis active-slot filtering.
+    const contributing=_activeYearSlots().filter(y=>{
       const slotKey=y.toLowerCase();
       const dvSlot=h.dailyVolumes&&h.dailyVolumes[slotKey];
       if(!dvSlot)return false;
@@ -2955,9 +3223,15 @@ function computeDayIndexForecast(h){
     });
     if(totalWeight<=0){result[ch]=null;return;}
 
-    // Normalise weightedIndex so it sums to 1.0 (accounts for partial year-weight coverage)
+    // Normalise weightedIndex so it sums to 1.0 (accounts for partial year-weight coverage).
+    // SINGLE-YEAR PATH GUARD: when only 1 year contributes (historyYears=1 or only Y1 has data),
+    // totalWeight = DAY_INDEX_WEIGHTS.Y1 = 0.40 and indexSum = sum(fracs)*0.40 = 1.0*0.40 = 0.40.
+    // After division each normIndex[d] = (0.40*fracs[d]) / 0.40 = fracs[d].
+    // The normalised array therefore sums to 1.0 exactly (same as the single-year fracs array).
+    // This is correct: with one year the weighted-index degrades to that year's day-shape, which
+    // already sums to 1.0 by construction. No special 1-year code path needed.
     const indexSum=weightedIndex.reduce((s,v)=>s+v,0);
-    if(indexSum<=0){result[ch]=null;return;}
+    if(indexSum<=0){result[ch]=null;return;} // guard: no contributing weight — all slots blank
     const normIndex=weightedIndex.map(v=>v/indexSum);
 
     // Projected volume per day = normalised_index[d] * planVolume[ch]
@@ -3573,6 +3847,24 @@ function renderHCTab(){
     _zeroVolEl.style.display='none';
   }
   const shrink=APP.config.shrink.total;
+  // Shrinkage-zero note in Tab 6: when all shrinkage components are 0, Gross HC = Net HC.
+  // Surface an inline note so the analyst knows the output reflects NET requirement only.
+  let _shrinkZeroNoteEl=document.getElementById('hcShrinkZeroNote');
+  if(!_shrinkZeroNoteEl){
+    _shrinkZeroNoteEl=document.createElement('div');
+    _shrinkZeroNoteEl.id='hcShrinkZeroNote';
+    _shrinkZeroNoteEl.className='alert alert--warning mb-3';
+    _shrinkZeroNoteEl.style.fontSize='var(--text-xs)';
+    const _shrinkInsertBefore=document.getElementById('hcCapWarn');
+    if(_shrinkInsertBefore&&_shrinkInsertBefore.parentNode){
+      _shrinkInsertBefore.parentNode.insertBefore(_shrinkZeroNoteEl,_shrinkInsertBefore);
+    }
+  }
+  const _shrinkIsZero=shrink===0;
+  if(_shrinkZeroNoteEl){
+    _shrinkZeroNoteEl.style.display=_shrinkIsZero?'':'none';
+    if(_shrinkIsZero)_shrinkZeroNoteEl.innerHTML='<strong>Shrinkage not entered</strong> — showing NET requirement only; Gross HC equals Net HC. Enter Planned Leave, Unplanned Leave, and Training % on the Setup tab (Tab 1) for gross HC with shrinkage uplift.';
+  }
   // Daily summary: one row per day showing volume and HC per active channel
   // If single channel: same as before. If multi: show each channel column.
   // Day picker uses the active panel channel's days to stay in sync with the interval view.
@@ -4688,6 +4980,10 @@ function loadFromJSON(d){
   }
   if(d.detectedBaseYear)APP.detectedBaseYear=d.detectedBaseYear;
   if(d.config){
+    // Restore historyYears from export (written as d.config.historyYears since v2.1)
+    if(d.config.historyYears!=null){
+      APP.config.historyYears=Math.max(1,Math.min(5,+d.config.historyYears||1));
+    }
     if(d.config.defaultOperatingHours){
       document.getElementById('defaultStart').value=d.config.defaultOperatingHours.start;
       document.getElementById('defaultEnd').value=d.config.defaultOperatingHours.end;
@@ -4813,6 +5109,16 @@ function loadFromJSON(d){
     const{pl,ul,tr}=APP.config.shrink;
     APP.config.shrink.total=compoundShrinkage(pl,ul,tr);
   }
+  // historyYears migration for JSON export/import path
+  if(APP.config.historyYears==null||APP.config.historyYears===undefined){
+    let inferred=1;
+    for(let i=YEAR_SLOTS.length-1;i>=0;i--){
+      const y=YEAR_SLOTS[i];
+      const hasData=(APP.holidays||[]).some(h=>CHANNELS.some(ch=>(h.years&&h.years[y]&&h.years[y].actual&&h.years[y].actual[ch]>0)));
+      if(hasData){inferred=i+1;break;}
+    }
+    APP.config.historyYears=Math.max(1,Math.min(5,inferred));
+  }
   updateQueueGate();
   hcCache={};restoreFormFromConfig();renderHolidayList();
 }
@@ -4820,7 +5126,7 @@ function exportData(){
   downloadJSON({_exported:new Date().toISOString(),_version:'2.0',
     queue:{name:document.getElementById('queueName').value,region:document.getElementById('queueRegion').value,type:document.getElementById('queueType').value},
     detectedBaseYear:APP.detectedBaseYear,
-    config:{defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd},
+    config:{historyYears:APP.config.historyYears||1,defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd},
       defaultShrinkage:{plannedLeave:APP.config.shrink.pl,unplannedLeave:APP.config.shrink.ul,training:APP.config.shrink.tr,total:APP.config.shrink.total},
       serviceLevelTargets:{voice:{sl_pct:APP.config.sl.voicePct,sl_seconds:APP.config.sl.voiceSec},chat:{sl_pct:APP.config.sl.chatPct,sl_seconds:APP.config.sl.chatSec},email:{sl_pct:APP.config.sl.emailPct,sl_hours:APP.config.sl.emailHrs}},
       channelParams:{voice:{aht_seconds:APP.config.aht.voice},chat:{aht_seconds:APP.config.aht.chat,concurrency:APP.config.concurrency},email:{aht_seconds:APP.config.aht.email,occupancy_pct:APP.config.emailOccupancy},blended:{voice_pct:APP.config.blendedVoicePct,chat_pct:APP.config.blendedChatPct,email_pct:APP.config.blendedEmailPct}}},
@@ -4965,6 +5271,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   (function(){const _eEl=document.getElementById('blendedEmailPct');if(_eEl)_eEl.value=APP.config.blendedEmailPct??20;})();
   updateShrinkage();validateBlendedSplit();validateAHT();validateOpHours();validateEmailOccupancy();
   updateQueueGate();
+  renderReadinessPanel();
   renderHCChannelPicker();buildHCPanelTabs();
   pingBackend();setInterval(pingBackend,15000);
   initDB().catch(()=>{_idbReadyResolve(null);/* IndexedDB unavailable — save/load disabled */});
