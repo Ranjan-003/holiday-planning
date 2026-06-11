@@ -38,6 +38,11 @@ These rules are non-negotiable. Any output that violates them is incorrect.
 - **Shrinkage** — Always compound: `1 − (1−Planned%) × (1−Unplanned%) × (1−Training%)`. Never a single blended figure.
 - **Erlang C** — Voice channel only. Chat uses the concurrency model (sessions per agent). Email uses daily throughput (operating hours × occupancy / AHT).
 - **Gross HC** — Used in all gap analysis and shift recommendation (bodies required on floor). Net HC is the pre-shrinkage requirement.
+- **Utilization / IBU** — The staffing chain is `gross = raw agents ÷ (IBU% or Utilization%) ÷ (1 − compound shrinkage)`. Voice uses IBU %, Chat uses Utilization %. Email's Occupancy IS its utilization (already inside the throughput formula) — never add a second email divisor. Net/raw always means pre-utilization, pre-shrinkage.
+- **Day-shape projection** — Holiday-anchored decomposition only: calendar-anchored base (normal week → weekend-aware auto-base → flat) × holiday multiplier indexed by distance-from-holiday. Pure DOW rotation is forbidden. Tab 5's dowSplit is a manual projection override, never a base source.
+- **Week order** — Saturday-first everywhere: arrays, tables, day pickers, and any calendar UI. Day letters: Y=Sat, S=Sun, M=Mon, T=Tue, W=Wed, R=Thu, F=Fri; `-` = day off.
+- **Self-describing labels** — Every metric label must state what it measures and at what grain (per-interval vs per-day vs per-week). "Peak" metrics are per-interval peaks for one day, never weekly totals. A label that misdescribes its number is an Amber defect.
+- **Reactive UI** — Any banner, caption, or dependent control must update immediately when any input it depends on changes (in every entry order), not only on full re-render. A stale dependent control is an Amber defect.
 - **CSS tokens** — All colors must come from CSS variables in `style-guide.css`. No hardcoded hex values in `index.htm`.
 - **No placeholders** — Every formula, calculation, and UI component must be complete and runnable. No TODOs. No stubs.
 
@@ -76,7 +81,7 @@ The pipeline will run automatically (maximum **2 generate→critique cycles**):
 2. **wfm-generator** — implements every sub-task with full file access; reads before writing; builds completely. On cycle 2, receives the full cycle-1 critique and must resolve every item.
 3. **wfm-critic** — reads the changed files and scores **Red / Amber / Green** against what was changed in this request only. Scoring rules:
    - **Green** — all WFM formulas correct, no false user-facing claims, no broken channel routing. Dead CSS rules, audit-trail gaps, and comment style do **not** block Green.
-   - **Amber** — incorrect HC formula result, false UI claim, broken channel routing, or data-loss risk.
+   - **Amber** — incorrect HC formula result, false UI claim, broken channel routing, data-loss risk, a dependent UI element (banner/caption/dropdown) that fails to update reactively when its inputs change in any entry order, or a user-facing label that misdescribes the number or grain it displays.
    - **Red** — runtime crash, Infinity/NaN in output, or direct WFM domain rule violation.
 4. **Ship** — only on **Green**: `git add`, `git commit`, `git push` to GitHub. GitHub Pages redeploys automatically.
 
