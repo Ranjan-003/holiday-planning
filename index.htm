@@ -238,11 +238,21 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
     </select>
   </div>
   <button class="btn btn--primary btn--sm" onclick="confirmQueueSetup()" id="queueConfirmBtn">Set queue</button>
-  <button class="btn btn--secondary btn--sm" onclick="saveQueuePlan()">Save plan</button>
+  <div style="display:flex;flex-direction:column;gap:2px">
+    <button class="btn btn--secondary btn--sm" onclick="saveQueuePlan()">Save plan</button>
+    <span id="lastBackupCaption" style="font-size:var(--text-xs);color:var(--text-tertiary);line-height:1.3;white-space:nowrap">Saved to this browser &mdash; last backup: <span id="lastBackupDate">none</span></span>
+  </div>
   <button class="btn btn--secondary btn--sm" onclick="openLoadModal()">Load saved plan</button>
+  <button class="btn btn--secondary btn--sm" onclick="backupAllPlans()">Back up all plans</button>
+  <button class="btn btn--secondary btn--sm" onclick="restorePlansFromFile()">Restore plans</button>
   <div id="queueActiveBadge" style="display:none;margin-left:auto">
     <span class="queue-label-badge" id="queueActiveBadgeText"></span>
   </div>
+</div>
+<!-- ═══ BACKUP WARNING BANNER ═══ -->
+<div id="backupWarningBanner" style="display:flex;align-items:flex-start;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);background:var(--color-amber-50);border-bottom:1px solid var(--color-amber-100);font-size:var(--text-sm);color:var(--color-amber-700)">
+  <span style="flex:1">Plans are saved in THIS browser only &mdash; clearing browser data or switching device will lose them. Use <strong>Back up all plans</strong> regularly, or restore from a backup file.</span>
+  <button class="btn btn--ghost btn--sm" onclick="document.getElementById('backupWarningBanner').remove()" style="color:var(--color-amber-700);flex-shrink:0" aria-label="Dismiss">&#x2715;</button>
 </div>
 
 <!-- ═══ YEAR BANNER ═══ -->
@@ -1053,6 +1063,84 @@ async function openLoadModal(){
   document.getElementById('loadModal').classList.remove('hidden');
 }
 function closeLoadModal(){document.getElementById('loadModal').classList.add('hidden');}
+// ── Backup / Restore ──────────────────────────────────────────────────────────
+// backupAllPlans: reads all records from IndexedDB queue_plans store, builds a
+// versioned JSON envelope, and triggers a browser download. Updates the in-memory
+// last-backup caption on success.
+async function backupAllPlans(){
+  const db=await Promise.race([idbReady,new Promise(r=>setTimeout(()=>r(null),3000))]);
+  if(!db){alert('Storage is not ready yet. Please wait a moment and try again.');return;}
+  const plans=await new Promise((res,rej)=>{
+    const tx=db.transaction(STORE,'readonly');
+    const req=tx.objectStore(STORE).getAll();
+    req.onsuccess=()=>res(req.result||[]);
+    req.onerror=e=>rej(e.target.error);
+  });
+  if(!plans.length){alert('No saved plans found — nothing to back up.');return;}
+  const today=new Date().toISOString().slice(0,10);
+  const envelope={app:'wfm-holiday-planner',backupVersion:1,exportedAt:new Date().toISOString(),planCount:plans.length,plans};
+  const blob=new Blob([JSON.stringify(envelope,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download='wfm-plans-backup-'+today+'.json';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  const dateEl=document.getElementById('lastBackupDate');
+  if(dateEl)dateEl.textContent=today;
+}
+// restorePlansFromFile: opens a hidden file input, reads the selected JSON backup,
+// validates the envelope, upserts each record into IndexedDB, then refreshes the
+// Load modal list and shows a summary. Malformed files show an error and leave IDB
+// unchanged. Each put() is wrapped individually so a single bad record does not
+// abort the whole restore.
+function restorePlansFromFile(){
+  const fileInput=document.createElement('input');
+  fileInput.type='file';
+  fileInput.accept='.json';
+  fileInput.style.display='none';
+  document.body.appendChild(fileInput);
+  fileInput.addEventListener('change',async function(){
+    const file=fileInput.files&&fileInput.files[0];
+    document.body.removeChild(fileInput);
+    if(!file)return;
+    let data;
+    try{
+      const text=await file.text();
+      data=JSON.parse(text);
+    }catch(e){
+      alert('Could not read file — invalid JSON. Please select a valid backup file.');
+      return;
+    }
+    if(data.app!=='wfm-holiday-planner'||!Array.isArray(data.plans)){
+      alert('This file is not a valid WFM Holiday Planner backup. Restore cancelled.');
+      return;
+    }
+    const db=await Promise.race([idbReady,new Promise(r=>setTimeout(()=>r(null),3000))]);
+    if(!db){alert('Storage is not ready yet. Please wait a moment and try again.');return;}
+    let ok=0,skipped=0;
+    for(const record of data.plans){
+      try{
+        await new Promise((res,rej)=>{
+          const tx=db.transaction(STORE,'readwrite');
+          const req=tx.objectStore(STORE).put(record);
+          req.onsuccess=res;
+          req.onerror=e=>rej(e.target.error);
+        });
+        ok++;
+      }catch(e){
+        console.warn('[WFM] Restore: skipped record',record&&record._planKey,'—',e&&e.message);
+        skipped++;
+      }
+    }
+    alert('Restored '+ok+' of '+data.plans.length+' plans.'+(skipped?' ('+skipped+' skipped due to errors — see console)':''));
+    openLoadModal();
+  });
+  fileInput.click();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 async function restoreQueuePlan(planKey){
   const db=await Promise.race([idbReady,new Promise(r=>setTimeout(()=>r(null),3000))]);
   if(!db){alert('Storage is not ready yet. Please wait a moment and try again.');return;}
