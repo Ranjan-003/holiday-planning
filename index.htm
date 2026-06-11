@@ -426,62 +426,107 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
       <!-- SL Targets & AHT -->
       <div class="card mb-4">
         <div class="card__header"><span class="card__title">Service level targets &amp; AHT <span class="field-required-hint">required</span></span></div>
+
+        <!-- Voice row: each input has its own label stacked above it -->
         <div class="form-group mb-3">
-          <label class="form-label">Voice — % answered within (sec) · AHT · Concurrency</label>
-          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px auto 90px;gap:var(--sp-2);align-items:center">
-            <input type="number" id="slVoicePct" value="80" min="1" max="100" onchange="validateAHT();invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
-            <input type="number" id="slVoiceSec" value="20" min="1" onchange="invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
-            <input type="number" id="ahtVoice" value="6" min="0.01" step="0.01" aria-label="Voice AHT value" oninput="onAHTInput('voice');validateAHT();invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)" aria-hidden="true">unit</span>
-            <select id="ahtVoiceUnit" style="height:36px" aria-label="Voice AHT unit" onchange="onAHTUnitChange('voice')">
-              <option value="60" selected>Minutes</option>
-              <option value="1">Seconds</option>
-              <option value="3600">Hours</option>
-            </select>
+          <label class="form-label">Voice</label>
+          <div style="display:grid;grid-template-columns:70px 80px 80px 90px 90px;gap:var(--sp-3);align-items:end">
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">SL %</label>
+              <input type="number" id="slVoicePct" value="80" min="1" max="100" onchange="validateAHT();invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">Within (sec)</label>
+              <input type="number" id="slVoiceSec" value="20" min="1" onchange="invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">AHT</label>
+              <input type="number" id="ahtVoice" value="6" min="0.01" step="0.01" aria-label="Voice AHT value" oninput="onAHTInput('voice');validateAHT();invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">AHT unit</label>
+              <select id="ahtVoiceUnit" style="height:36px" aria-label="Voice AHT unit" onchange="onAHTUnitChange('voice')">
+                <option value="60" selected>Minutes</option>
+                <option value="1">Seconds</option>
+                <option value="3600">Hours</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">IBU % <span class="field-optional-hint">optional</span></label>
+              <input type="number" id="utilVoice" value="100" min="30" max="100" step="1" aria-label="Voice IBU utilization %" title="Voice IBU / Utilization % — divides raw Erlang C agents before shrinkage. Default 100 (no adjustment)." oninput="invalidateAllCaches()">
+            </div>
           </div>
         </div>
+
+        <!-- Chat row -->
         <div class="form-group mb-3">
-          <label class="form-label">Chat — % answered within (sec) · AHT · Concurrency</label>
-          <div style="display:grid;grid-template-columns:55px auto 70px auto 80px auto 90px auto 60px;gap:var(--sp-2);align-items:center">
-            <input type="number" id="slChatPct" value="90" min="1" max="100" onchange="invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
-            <input type="number" id="slChatSec" value="30" min="1" onchange="invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
-            <input type="number" id="ahtChat" value="8" min="0.01" step="0.01" aria-label="Chat AHT value (default: 8 min)" title="Chat AHT — default: 8 min (480 s)" oninput="onAHTInput('chat');validateAHT();invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)" aria-hidden="true">unit</span>
-            <select id="ahtChatUnit" style="height:36px" aria-label="Chat AHT unit" onchange="onAHTUnitChange('chat')">
-              <option value="60" selected>Minutes</option>
-              <option value="1">Seconds</option>
-              <option value="3600">Hours</option>
-            </select>
-            <span class="text-faint" style="font-size:var(--text-sm)">Conc.</span>
-            <input type="number" id="chatConcurrency" value="2.5" min="1" max="10" step="0.5" onchange="invalidateAllCaches()">
+          <label class="form-label">Chat</label>
+          <div style="display:grid;grid-template-columns:70px 80px 80px 90px 80px 80px;gap:var(--sp-3);align-items:end">
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">SL %</label>
+              <input type="number" id="slChatPct" value="90" min="1" max="100" onchange="invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">Within (sec)</label>
+              <input type="number" id="slChatSec" value="30" min="1" onchange="invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">AHT</label>
+              <input type="number" id="ahtChat" value="8" min="0.01" step="0.01" aria-label="Chat AHT value (default: 8 min)" title="Chat AHT — default: 8 min (480 s)" oninput="onAHTInput('chat');validateAHT();invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">AHT unit</label>
+              <select id="ahtChatUnit" style="height:36px" aria-label="Chat AHT unit" onchange="onAHTUnitChange('chat')">
+                <option value="60" selected>Minutes</option>
+                <option value="1">Seconds</option>
+                <option value="3600">Hours</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">Concurrency</label>
+              <input type="number" id="chatConcurrency" value="2.5" min="1" max="10" step="0.5" onchange="invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">Utilization % <span class="field-optional-hint">optional</span></label>
+              <input type="number" id="utilChat" value="100" min="30" max="100" step="1" aria-label="Chat utilization %" title="Chat Utilization % — divides raw concurrency agents before shrinkage. Default 100 (no adjustment)." oninput="invalidateAllCaches()">
+            </div>
           </div>
           <div class="text-faint" style="font-size:var(--text-xs);margin-top:var(--sp-1)">AHT default: 8 min (480 s)</div>
         </div>
-        <!-- FIX 2: Separate email occupancy from SL% -->
+
+        <!-- Email row -->
         <div class="form-group mb-3">
-          <label class="form-label">Email — % responded within (hrs) · AHT · Occupancy %</label>
-          <div style="display:grid;grid-template-columns:55px auto 55px auto 80px auto 90px auto 60px;gap:var(--sp-2);align-items:center">
-            <input type="number" id="slEmailPct" value="95" min="1" max="100" onchange="invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)">% in</span>
-            <input type="number" id="slEmailHrs" value="4" min="1" onchange="invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)">AHT</span>
-            <input type="number" id="ahtEmail" value="10" min="0.01" step="0.01" aria-label="Email AHT value (default: 10 min)" title="Email AHT — default: 10 min (600 s)" oninput="onAHTInput('email');validateAHT();invalidateAllCaches()">
-            <span class="text-faint" style="font-size:var(--text-sm)" aria-hidden="true">unit</span>
-            <select id="ahtEmailUnit" style="height:36px" aria-label="Email AHT unit" onchange="onAHTUnitChange('email')">
-              <option value="60" selected>Minutes</option>
-              <option value="1">Seconds</option>
-              <option value="3600">Hours</option>
-            </select>
-            <span class="text-faint" style="font-size:var(--text-sm)">Occ.</span>
-            <input type="number" id="emailOccupancy" value="75" min="20" max="99" onchange="validateEmailOccupancy()">
+          <label class="form-label">Email</label>
+          <div style="display:grid;grid-template-columns:70px 80px 80px 90px 80px;gap:var(--sp-3);align-items:end">
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">SL %</label>
+              <input type="number" id="slEmailPct" value="95" min="1" max="100" onchange="invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">Within (hrs)</label>
+              <input type="number" id="slEmailHrs" value="4" min="1" onchange="invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">AHT</label>
+              <input type="number" id="ahtEmail" value="10" min="0.01" step="0.01" aria-label="Email AHT value (default: 10 min)" title="Email AHT — default: 10 min (600 s)" oninput="onAHTInput('email');validateAHT();invalidateAllCaches()">
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">AHT unit</label>
+              <select id="ahtEmailUnit" style="height:36px" aria-label="Email AHT unit" onchange="onAHTUnitChange('email')">
+                <option value="60" selected>Minutes</option>
+                <option value="1">Seconds</option>
+                <option value="3600">Hours</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--text-secondary);display:block;margin-bottom:3px">Occupancy %</label>
+              <input type="number" id="emailOccupancy" value="75" min="20" max="99" onchange="validateEmailOccupancy()">
+            </div>
           </div>
           <div class="text-faint" style="font-size:var(--text-xs);margin-top:var(--sp-1)">AHT default: 10 min (600 s)</div>
-          <div class="alert alert--info mt-2"><small>Email occupancy is separate from SL%. SL% tracks response time; occupancy targets agent utilisation.</small></div>
+          <div class="alert alert--info mt-2"><small>Email occupancy is separate from SL%. SL% tracks response time; occupancy targets agent utilisation. Occupancy is email's utilization — already applied in the throughput formula.</small></div>
         </div>
+
         <div id="ahtError" class="form-error hidden">AHT must be at least 1 second for all channels.</div>
         <!-- FIX 3: Blended split configuration — three-way Voice/Chat/Email -->
         <div class="form-group">
@@ -512,10 +557,9 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
       <div class="card">
         <div class="card__header"><span class="card__title">Anomaly detection threshold <span class="field-optional-hint">optional</span></span></div>
         <div class="form-group">
-          <label class="form-label">Auto-flag if deviation &gt; N standard deviations</label>
+          <label class="form-label">Auto-flags outlier years: a year is flagged when its YoY change deviates from the average of all years by more than N standard deviations. Flagged years are excluded from forecast combinations by default (override on Tab 2). Needs 3+ years of data — inactive with 1-2 years.</label>
           <input type="number" id="anomalyThreshold" value="2" min="1" max="5" step="0.5">
         </div>
-        <div class="alert alert--warning mt-3"><small>Flagged years excluded from combinations by default. Override per holiday on Tab 2.</small></div>
       </div>
     </div>
   </div>
@@ -757,7 +801,9 @@ let APP={
     blendedChatPct:30,
     blendedEmailPct:20,
     anomalyThreshold:2,
-    historyYears:1
+    historyYears:1,
+    utilVoice:100,
+    utilChat:100
   },
   backendOnline:false
 };
@@ -1387,6 +1433,11 @@ function restoreFormFromConfig(){
   document.getElementById('slEmailPct').value=cfg.sl?.emailPct??95;
   document.getElementById('slEmailHrs').value=cfg.sl?.emailHrs??4;
   document.getElementById('anomalyThreshold').value=cfg.anomalyThreshold??2;
+  // Restore IBU / Utilization inputs (default 100 when absent from saved plan)
+  const _uvEl=document.getElementById('utilVoice');
+  const _ucEl=document.getElementById('utilChat');
+  if(_uvEl)_uvEl.value=cfg.utilVoice??100;
+  if(_ucEl)_ucEl.value=cfg.utilChat??100;
   // Restore historyYears selector
   const _hySel=document.getElementById('historyYearsSelect');
   if(_hySel&&cfg.historyYears)_hySel.value=String(Math.max(1,Math.min(5,cfg.historyYears||1)));
@@ -2028,6 +2079,18 @@ function computeIntervals(dailyVol,channel,opStart,opEnd){
     const ePct=Math.max(0,(cfg.blendedEmailPct||0)/100);
     if(ePct>0)blendedEmailNetHCFlat=computeEmailDailyNetHC(dailyVol*ePct,opStart,opEnd);
   }
+  // IBU / Utilization divisors:
+  // Voice IBU (utilVoice) and Chat Utilization (utilChat) represent the fraction of time
+  // agents are available for productive work (vs idle/non-work states not captured by shrinkage).
+  // Formula: grossHC = rawAgents ÷ (util/100) ÷ (1 − compoundShrinkage)
+  //   where rawAgents = Erlang C output (voice) or concurrency ceil (chat).
+  // Net HC = rawAgents (pre-utilization, pre-shrinkage) — displayed on the daily summary
+  //   and interval table so planners can see the pure staffing model requirement.
+  // Clamp to ≥30 before dividing to prevent infinite grossHC at extremely low utilization.
+  // Email path: utilization is already embedded in the throughput formula via emailOccupancy —
+  //   this divisor is intentionally not applied to email (email path untouched).
+  const utilVoiceFrac=Math.max(0.30,Math.min(1.0,(cfg.utilVoice||100)/100));
+  const utilChatFrac=Math.max(0.30,Math.min(1.0,(cfg.utilChat||100)/100));
   let hitCap=false;
   const result=intervals.map(iv=>{
     let net;
@@ -2040,7 +2103,18 @@ function computeIntervals(dailyVol,channel,opStart,opEnd){
       net=computeNetHC(iv.callsPerHour,channel,opStart,opEnd);
     }
     if(net>=2000)hitCap=true;
-    const gross=grossHC(net,shrink);
+    // Apply utilization divisor between raw agents and shrinkage:
+    //   grossHC = rawAgents ÷ utilFrac ÷ (1 − shrinkage)
+    // For email and blended: utilization is not applied (email uses occupancy; blended
+    // already embeds voice+chat utilization via their respective util fracs if needed —
+    // for simplicity blended uses 1.0 util divisor to avoid double-counting).
+    let utilAdjustedNet=net;
+    if(channel==='voice'&&utilVoiceFrac<1){
+      utilAdjustedNet=Math.ceil(net/utilVoiceFrac);
+    } else if(channel==='chat'&&utilChatFrac<1){
+      utilAdjustedNet=Math.ceil(net/utilChatFrac);
+    }
+    const gross=grossHC(utilAdjustedNet,shrink);
     if(gross>=9999)hitCap=true; // sentinel hit (extreme shrinkage) — same cap-warn banner
     return{...iv,netHC:net,grossHC:gross};
   });
@@ -2073,6 +2147,8 @@ function invalidateAllCaches(){
   cfg.aht.email=Math.max(1,_ahtSeconds.email||600);
   cfg.concurrency=+document.getElementById('chatConcurrency').value||2.5;
   cfg.emailOccupancy=+document.getElementById('emailOccupancy').value||75;
+  cfg.utilVoice=Math.max(30,Math.min(100,+document.getElementById('utilVoice').value||100));
+  cfg.utilChat=Math.max(30,Math.min(100,+document.getElementById('utilChat').value||100));
   const _bv=Math.max(0,Math.min(100,+document.getElementById('blendedVoicePct').value||0));
   const _bc=Math.max(0,Math.min(100,+document.getElementById('blendedChatPct').value||0));
   // Read email pct directly from DOM (field is now editable; validateBlendedSplit keeps it
@@ -2263,7 +2339,8 @@ function renderHolidayList(resetPage){
             style="border:none;background:none;font-size:var(--text-md);font-weight:var(--weight-semibold);padding:0;width:220px"
             oninput="setHVal('${h.id}','name',this.value)">
           <input type="date" value="${h.date}" style="height:28px;width:150px;font-size:var(--text-sm)"
-            onchange="setHVal('${h.id}','date',this.value)">
+            onchange="setHVal('${h.id}','date',this.value);renderHolidayList()">
+          ${h.date?`<span style="font-size:var(--text-xs);color:var(--text-tertiary)">${_weekdayFromDate(h.date)}</span>`:''}
         </div>
         <button class="btn btn--danger btn--sm" onclick="removeHoliday('${h.id}')">Remove</button>
       </div>
@@ -2342,7 +2419,7 @@ function renderHolidayList(resetPage){
           // mismatch flag is suppressed entirely to avoid an unresolvable warning.
           const slotActualTotal=CHANNELS.reduce((s,ch)=>s+(h.years[y]&&h.years[y].actual[ch]>0?h.years[y].actual[ch]:0),0);
           const _isBlendedOnly=(h.channels&&h.channels.includes('blended'))&&slotActualTotal===0&&(h.years[y]&&(h.years[y].actual.blended||0)>0);
-          const showMismatch=!_isBlendedOnly&&grandTotal>0&&slotActualTotal>0&&Math.abs(grandTotal-slotActualTotal)/slotActualTotal>0.01;
+          const showMismatch=!_isBlendedOnly&&grandTotal>0&&slotActualTotal>0&&Math.abs(grandTotal-slotActualTotal)>=1;
           // Y5 spans full width in the 2-column hist-data-grid to avoid an orphaned blank right cell
           const _y5Span=y==='Y5'?'grid-column:1/-1;':'';
           // Apply hidden class to slots beyond historyYears at render time
@@ -2354,8 +2431,9 @@ function renderHolidayList(resetPage){
             oninput="setHVal('${h.id}','years.${y}.year',this.value)">
           <label style="font-size:10px;color:var(--text-tertiary);margin-top:var(--sp-2);display:block">Holiday date (this year)</label>
           <input type="date" value="${(h.years[y]||{}).holidayDate||''}"
-            style="margin-bottom:var(--sp-2)"
-            onchange="setHVal('${h.id}','years.${y}.holidayDate',this.value);if(document.querySelector('.tab-panel:nth-child(2).active'))renderHistoricalAnalysis()">
+            style="margin-bottom:2px"
+            onchange="setHVal('${h.id}','years.${y}.holidayDate',this.value);if(document.querySelector('.tab-panel:nth-child(2).active'))renderHistoricalAnalysis();const _wd=_weekdayFromDate(this.value);const _wdEl=document.getElementById('ydatecap_${h.id}_${y}');if(_wdEl)_wdEl.textContent=_wd;">
+          <div id="ydatecap_${h.id}_${y}" style="font-size:9px;color:var(--text-tertiary);margin-bottom:var(--sp-2);min-height:12px">${_weekdayFromDate((h.years[y]||{}).holidayDate||'')}</div>
           <label style="font-size:10px;color:var(--text-tertiary)">Actual volume</label>
           ${(()=>{
             // Show voice/chat/email inputs always; add blended input when holiday uses blended.
@@ -2457,8 +2535,10 @@ function renderHolidayList(resetPage){
         // hasOverride: true when at least one forecastOverride cell exists for this holiday
         const hasOverride=h.forecastOverride&&Object.keys(h.forecastOverride).length>0;
         const useSuggBtn=(!anyIndexOnly&&hasOverride)?`<button class="btn btn--ghost btn--sm" style="margin-left:var(--sp-3);font-size:var(--text-xs)" onclick="useForecastSuggestion('${h.id}')">Use suggestion</button>`:'';
+        const _shaped=computeHolidayShapedSplit(h,h.channels&&h.channels[0]||'voice');
+        const _contribSlots=_contributingSlotsForForecast(h);
         return`<div class="dvg-forecast-section" id="dvg_forecast_section_${h.id}" style="display:none">
-          <div class="dvg-forecast-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)"><span>Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)${titleSuffix}</span>${useSuggBtn}</div>
+          <div class="dvg-forecast-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">${_buildForecastTitleHtml(h,_shaped.anchored,anyIndexOnly,titleSuffix,_contribSlots)}${useSuggBtn}</div>
           <div class="dvg-forecast-section-head">
             <span></span>
             <span class="dvg-col-label dvg-col-label--voice">Voice</span>
@@ -2636,7 +2716,7 @@ function renderHistoricalAnalysis(){
     const autoFlags=detectAnomalies(h);h.autoAnomalyFlags=autoFlags;
     return`<div class="card mb-6">
       <div class="card__header"><div><div class="card__title">${escHtml(h.name)||'Unnamed'}</div>
-      <div class="card__subtitle">${h.date||'No date'} &nbsp;·&nbsp; <span class="badge badge--${h.planSource==='WFM Forecast'?'blue':'purple'}">${h.planSource}</span></div></div></div>
+      <div class="card__subtitle">${h.date?(h.date+' · '+_weekdayFromDate(h.date)):'No date'} &nbsp;·&nbsp; <span class="badge badge--${h.planSource==='WFM Forecast'?'blue':'purple'}">${h.planSource}</span></div></div></div>
       ${CHANNELS.filter(ch=>h.channels.includes(ch)).map(ch=>{
         // Only render rows where actual volume > 0 for this channel.
         // Use _activeYearSlots() so historyYears selector controls which slots appear in Tab 2.
@@ -3006,7 +3086,7 @@ function renderCombinations(){
   if(!APP.holidays.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No holidays</div></div>';return;}
   el.innerHTML=APP.holidays.map(h=>`
     <div class="card mb-6">
-      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
+      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date?(h.date+' \xb7 '+_weekdayFromDate(h.date)):''}</div></div>
       ${h.channels.map(ch=>{
         // Guard: AHT must be >= 1s for staffing output to be meaningful.
         // If missing, show explained placeholder instead of combination table.
@@ -3083,7 +3163,7 @@ function renderRecommendation(){
   if(!APP.holidays.length){el.innerHTML='<div class="empty-state"><div class="empty-state__title">No holidays</div></div>';return;}
   el.innerHTML=APP.holidays.map(h=>`
     <div class="card mb-6">
-      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
+      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date?(h.date+' \xb7 '+_weekdayFromDate(h.date)):''}</div></div>
       <div style="display:grid;grid-template-columns:repeat(${h.channels.length},1fr);gap:var(--sp-4)">
         ${h.channels.map(ch=>{
           const combos=h.combinations[ch]||generateCombinations(h,ch);
@@ -3132,7 +3212,7 @@ function renderDailyBreakdown(){
     const noDateNote=!anyValidDate&&h.date?`<div class="alert alert--info mb-3" style="font-size:var(--text-xs)"><small>No holidayDate found for any active year slot — the day-shape projection cannot anchor the dip to the holiday weekday. Enter a Holiday date in Setup (Tab 1) for each year slot to enable the calendar-anchored model.</small></div>`:'';
     return`
     <div class="card mb-6">
-      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date||''}</div></div>
+      <div class="card__header"><div class="card__title">${escHtml(h.name)||'Unnamed'} &nbsp;·&nbsp; ${h.date?(h.date+' \xb7 '+_weekdayFromDate(h.date)):''}</div></div>
       ${noDateNote}
       <div class="card mb-4" style="background:var(--surface-sunken)">
         <div class="card__header"><span class="card__title" style="font-size:var(--text-sm)">Day-of-week split % <span class="field-optional-hint">(manual override — editing any field locks this channel to your values)</span></span>
@@ -3332,6 +3412,19 @@ function _parseDateCol(dateStr){
   return dow===6?0:dow+1;
 }
 
+/* _weekdayFromDate: returns the full weekday name for a 'yyyy-mm-dd' string using
+   local-time construction (parts-split, never new Date('yyyy-mm-dd')) to avoid the
+   UTC-off-by-one day shift that occurs in time zones west of UTC.
+   Returns '' when the string is absent or invalid. */
+function _weekdayFromDate(dateStr){
+  if(!dateStr)return'';
+  const parts=dateStr.split('-');
+  if(parts.length!==3)return'';
+  const d=new Date(+parts[0],+parts[1]-1,+parts[2]);
+  if(isNaN(d.getTime()))return'';
+  return['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+}
+
 /* _rotateSplitToHoliday: cyclically rotate a 7-element DOW split array so that the
    holiday dip from a historical slot (slotHolidayDate) lands on the correct weekday
    in the plan year (targetDate). Both dates must be 'yyyy-mm-dd' strings.
@@ -3400,22 +3493,19 @@ function computeHolidayShapedSplit(h, ch){
       baseSource='normalWeek';
     }
   }
-  // Priority B: non-flat dowSplit[ch] — user has customised the global split
-  if(!base&&Array.isArray(h.dowSplit&&h.dowSplit[ch])&&h.dowSplit[ch].length===7){
-    const dsArr=h.dowSplit[ch];
-    const dsSum=dsArr.reduce((s,v)=>s+(+v||0),0);
-    if(dsSum>0){
-      const dsFracs=dsArr.map(v=>(+v||0)/dsSum);
-      // Check if it's non-flat: at least one element differs from 1/7 by > 0.5pp
-      const flat1_7=1/7;
-      const isNonFlat=dsFracs.some(f=>Math.abs(f-flat1_7)>0.005);
-      if(isNonFlat){
-        base=dsFracs;
-        baseSource='dowSplit';
-      }
-    }
-  }
-  // Priority C: weekend-aware auto-base derived from historical holiday-week volumes.
+  // Priority B (removed): dowSplit[ch] was previously used here as a base source.
+  // Removed because h.dowSplit is the OUTPUT of buildDailyData (the user-visible DOW split
+  // on Tab 5) and feeding it back into computeHolidayShapedSplit creates a circular base
+  // contamination: any prior decomposition result already written into h.dowSplit propagates
+  // into the next recompute, amplifying pattern artefacts. The correct priority chain is:
+  //   (a) normalWeekShape[ch] — explicit user-entered typical non-holiday week
+  //   (b) auto-weekend from observed holiday dailyVolumes (built below)
+  //   (c) flat 1/7 fallback
+  // The user can still manually override the final DOW split on Tab 5; that override is applied
+  // after this function returns (via buildDailyData's dowSplitManual flag) so it never contaminates
+  // the decomposition base.
+
+  // Priority B: weekend-aware auto-base derived from historical holiday-week volumes.
   // When neither normalWeekShape nor a non-flat dowSplit is available, build a base that
   // preserves weekend (Sat/Sun) vs weekday distinction from the actual observed data rather
   // than assuming every day is equal.  Algorithm:
@@ -3560,6 +3650,107 @@ function computeHolidayShapedSplit(h, ch){
   values=values.map(v=>(isFinite(v)&&!isNaN(v))?v:1/7);
 
   return{values,baseSource,anchored};
+}
+
+/* _contributingSlotsForForecast: returns the union of year slots that actually
+   contributed data to the forecast computation across all channels for holiday h.
+   A slot is included when it has positive daily volumes for at least one channel
+   AND has a valid per-year holidayDate (required for delta anchoring).
+   Used by _buildForecastTitleHtml so the weight label reflects only slots whose
+   data was actually used in the calculation — not all active slots.
+   Returns an array of slot keys (e.g. ['Y1','Y2']). */
+function _contributingSlotsForForecast(h){
+  return _activeYearSlots().filter(y=>{
+    // Must have a valid per-year holidayDate
+    const c_y=_parseDateCol((h.years&&h.years[y]&&h.years[y].holidayDate)||'');
+    if(c_y<0)return false;
+    // Must have positive daily volumes for at least one channel
+    const slotKey=y.toLowerCase();
+    const dvSlot=h.dailyVolumes&&h.dailyVolumes[slotKey];
+    if(!dvSlot)return false;
+    return['voice','chat','email'].some(ch=>{
+      const arr=dvSlot[ch];
+      if(!Array.isArray(arr))return false;
+      return arr.reduce((s,v)=>s+(v!=null?+v:0),0)>0;
+    });
+  });
+}
+
+/* _buildForecastTitleHtml: builds the forecast-pattern title string and optional
+   re-anchoring status badge used in all three DVG forecast header locations.
+
+   Returns an HTML string containing:
+   - The weight list built dynamically from slots that actually contributed to the
+     forecast calculation, with renormalised weights: e.g. 1 slot → "Y1×1.00";
+     2 slots → "Y1×0.57 + Y2×0.43" (raw weights renormalised to sum to 1.00).
+     When no contributing slots are available, falls back to active slots.
+   - When anchored=true: "re-anchored to [Weekday], [date]" in text-tertiary.
+   - When anchored=false and any daily volumes exist: amber inline warning
+     "not re-anchored — enter the holiday date for each historical year to anchor
+     the dip to the correct weekday" styled with CSS tokens only (no hex).
+
+   Parameters:
+     h                  — holiday object (for date, years, dailyVolumes)
+     anchored           — bool from computeHolidayShapedSplit return value
+     anyIndexOnly       — bool: true when planVolume not yet set (index-only mode)
+     titleSuffix        — string appended after the weights (e.g. index-only note)
+     contributingSlots  — optional array of slot keys (e.g. ['Y1','Y2']) that
+                          actually contributed to the forecast. When provided and
+                          non-empty, used instead of _activeYearSlots() so the
+                          weight label is truthful. Pass result of
+                          _contributingSlotsForForecast(h) at every call site.
+
+   CSS tokens used:
+     var(--color-amber-700)  — amber warning text
+     var(--color-amber-50)   — amber warning background
+     var(--color-amber-100)  — amber warning border
+     var(--text-tertiary)    — re-anchored note text
+*/
+function _buildForecastTitleHtml(h, anchored, anyIndexOnly, titleSuffix, contributingSlots){
+  // Use the provided contributing slots when non-empty; fall back to all active slots.
+  // This ensures the weight label matches what was actually computed, not just what is
+  // active in the UI — prevents false "Y1×0.57 + Y2×0.43" when only Y1 had usable data.
+  const slots=(contributingSlots&&contributingSlots.length>0)?contributingSlots:_activeYearSlots();
+  const rawSum=slots.reduce((s,y)=>s+(DAY_INDEX_WEIGHTS[y]||0),0);
+  let weightStr;
+  if(rawSum>0){
+    weightStr=slots.map(y=>{
+      const w=DAY_INDEX_WEIGHTS[y]||0;
+      const renorm=rawSum>0?w/rawSum:0;
+      return `${y}\xd7${renorm.toFixed(2)}`;
+    }).join(' + ');
+  } else {
+    weightStr='Y1\xd71.00';
+  }
+  const baseTitle=`Forecast pattern (weighted day-index \xb7 ${weightStr})${titleSuffix||''}`;
+
+  // Anchoring status
+  let anchorHtml='';
+  if(anchored&&h.date){
+    // Parse h.date local-time to get weekday name
+    const parts=(h.date||'').split('-');
+    let dayName='';
+    if(parts.length===3){
+      const d=new Date(+parts[0],+parts[1]-1,+parts[2]);
+      if(!isNaN(d.getTime()))dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][d.getDay()];
+    }
+    anchorHtml=dayName?` <span style="color:var(--text-tertiary);font-size:8px;font-weight:normal;font-style:normal">re-anchored to ${dayName}, ${h.date}</span>`:'';
+  } else {
+    // Check if any daily volumes exist for any channel in any active slot
+    const hasDailyData=slots.some(y=>{
+      const sk=y.toLowerCase();
+      const dvSlot=h.dailyVolumes&&h.dailyVolumes[sk];
+      if(!dvSlot)return false;
+      return ['voice','chat','email'].some(ch=>{
+        const arr=dvSlot[ch];
+        return Array.isArray(arr)&&arr.reduce((s,v)=>s+(v!=null?+v:0),0)>0;
+      });
+    });
+    if(hasDailyData){
+      anchorHtml=` <span style="display:inline-flex;align-items:center;padding:1px 6px;border-radius:var(--radius-pill);background:var(--color-amber-50);border:1px solid var(--color-amber-100);color:var(--color-amber-700);font-size:8px;font-weight:var(--weight-semibold);font-style:normal">not re-anchored — enter the holiday date for each historical year to anchor the dip to the correct weekday</span>`;
+    }
+  }
+  return`<span>${escHtml(baseTitle)}</span>${anchorHtml}`;
 }
 
 function computeDayIndexForecast(h){
@@ -3713,7 +3904,7 @@ function _updateDVGMismatch(hid,slotKey,h,grandTotal){
   const slotActualTotal=CHANNELS.reduce((s,ch)=>s+(h.years[y]&&h.years[y].actual[ch]>0?h.years[y].actual[ch]:0),0);
   // Suppression: blended-only slot — per-channel actuals are all zero but blended is present.
   const _isBlendedOnly=(h.channels&&h.channels.includes('blended'))&&slotActualTotal===0&&(h.years[y]&&(h.years[y].actual.blended||0)>0);
-  const show=!_isBlendedOnly&&grandTotal>0&&slotActualTotal>0&&Math.abs(grandTotal-slotActualTotal)/slotActualTotal>0.01;
+  const show=!_isBlendedOnly&&grandTotal>0&&slotActualTotal>0&&Math.abs(grandTotal-slotActualTotal)>=1;
   if(show){
     warnEl.textContent=`Daily totals (${grandTotal.toLocaleString()}) do not match historical actual total (${slotActualTotal.toLocaleString()}) — please reconcile.`;
     warnEl.classList.add('visible');
@@ -3760,7 +3951,9 @@ function _updateDVGForecastRow(hid,h){
     secDiv.className='dvg-forecast-section';
     secDiv.id='dvg_forecast_section_'+hid;
     secDiv.style.display='none'; // hidden until _syncForecastSectionVisibility sets it visible
-    secDiv.innerHTML=`<div class="dvg-forecast-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)"><span>Forecast pattern (weighted day-index &middot; Y1&times;0.40 + Y2&times;0.30 + Y3&times;0.20 + Y4&times;0.07 + Y5&times;0.03)</span></div>
+    const _shapedInject=computeHolidayShapedSplit(h,h.channels&&h.channels[0]||'voice');
+    const _contribSlotsInject=_contributingSlotsForForecast(h);
+    secDiv.innerHTML=`<div class="dvg-forecast-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-2)">${_buildForecastTitleHtml(h,_shapedInject.anchored,false,'',_contribSlotsInject)}</div>
 <div class="dvg-forecast-section-head">
   <span></span>
   <span class="dvg-col-label dvg-col-label--voice">Voice</span>
@@ -3787,10 +3980,15 @@ function _updateDVGForecastRow(hid,h){
   // When indexOnly=false: values[di] is an integer — format with toLocaleString().
   const anyIndexOnly=CHANNELS.some(ch=>forecast[ch]&&forecast[ch].indexOnly);
   // Update the title in the forecast section header to reflect index-only mode
-  const titleEl=sectionEl.querySelector('.dvg-forecast-title span');
-  if(titleEl){
-    const base='Forecast pattern (weighted day-index \xb7 Y1\xd70.40 + Y2\xd70.30 + Y3\xd70.20 + Y4\xd70.07 + Y5\xd70.03)';
-    titleEl.textContent=base+(anyIndexOnly?' — showing day-shape % (set plan volume to see projected volumes)':'');
+  const titleContainer=sectionEl.querySelector('.dvg-forecast-title');
+  if(titleContainer){
+    const _shapedReact=computeHolidayShapedSplit(h,h.channels&&h.channels[0]||'voice');
+    const _tSuffix=anyIndexOnly?' — showing day-shape % (set plan volume to see projected volumes)':'';
+    const _contribSlotsReact=_contributingSlotsForForecast(h);
+    // Preserve any existing "Use suggestion" button before replacing innerHTML
+    const _existingSuggBtn=titleContainer.querySelector('.dvg-sugg-btn');
+    titleContainer.innerHTML=_buildForecastTitleHtml(h,_shapedReact.anchored,anyIndexOnly,_tSuffix,_contribSlotsReact);
+    if(_existingSuggBtn)titleContainer.appendChild(_existingSuggBtn);
   }
   // Update "Use suggestion" button visibility
   const hasOverride=h.forecastOverride&&Object.keys(h.forecastOverride).length>0;
@@ -3802,8 +4000,8 @@ function _updateDVGForecastRow(hid,h){
       suggBtn.style.cssText='margin-left:var(--sp-3);font-size:var(--text-xs)';
       suggBtn.textContent='Use suggestion';
       suggBtn.onclick=function(){useForecastSuggestion(hid);};
-      const titleContainer=sectionEl.querySelector('.dvg-forecast-title');
-      if(titleContainer)titleContainer.appendChild(suggBtn);
+      const _tCont=sectionEl.querySelector('.dvg-forecast-title');
+      if(_tCont)_tCont.appendChild(suggBtn);
     }
   } else if(suggBtn){
     suggBtn.remove();
@@ -5352,12 +5550,20 @@ function loadFromJSON(d){
         const _vs=d.config.channelParams.voice.aht_seconds||360;
         _ahtSeconds.voice=_vs;
         document.getElementById('ahtVoice').value=parseFloat((_vs/_ahtDivisor('voice')).toFixed(6));
+        if(d.config.channelParams.voice.ibu_pct!=null){
+          APP.config.utilVoice=Math.max(30,Math.min(100,+d.config.channelParams.voice.ibu_pct));
+          const _uvEl=document.getElementById('utilVoice');if(_uvEl)_uvEl.value=APP.config.utilVoice;
+        }
       }
       if(d.config.channelParams.chat){
         const _cs=d.config.channelParams.chat.aht_seconds||480;
         _ahtSeconds.chat=_cs;
         document.getElementById('ahtChat').value=parseFloat((_cs/_ahtDivisor('chat')).toFixed(6));
         document.getElementById('chatConcurrency').value=d.config.channelParams.chat.concurrency||2.5;
+        if(d.config.channelParams.chat.utilization_pct!=null){
+          APP.config.utilChat=Math.max(30,Math.min(100,+d.config.channelParams.chat.utilization_pct));
+          const _ucEl=document.getElementById('utilChat');if(_ucEl)_ucEl.value=APP.config.utilChat;
+        }
       }
       if(d.config.channelParams.email){
         const _es=d.config.channelParams.email.aht_seconds||600;
@@ -5498,7 +5704,7 @@ function exportData(){
     config:{historyYears:APP.config.historyYears||1,defaultOperatingHours:{start:APP.config.defaultStart,end:APP.config.defaultEnd},
       defaultShrinkage:{plannedLeave:APP.config.shrink.pl,unplannedLeave:APP.config.shrink.ul,training:APP.config.shrink.tr,total:APP.config.shrink.total},
       serviceLevelTargets:{voice:{sl_pct:APP.config.sl.voicePct,sl_seconds:APP.config.sl.voiceSec},chat:{sl_pct:APP.config.sl.chatPct,sl_seconds:APP.config.sl.chatSec},email:{sl_pct:APP.config.sl.emailPct,sl_hours:APP.config.sl.emailHrs}},
-      channelParams:{voice:{aht_seconds:APP.config.aht.voice},chat:{aht_seconds:APP.config.aht.chat,concurrency:APP.config.concurrency},email:{aht_seconds:APP.config.aht.email,occupancy_pct:APP.config.emailOccupancy},blended:{voice_pct:APP.config.blendedVoicePct,chat_pct:APP.config.blendedChatPct,email_pct:APP.config.blendedEmailPct}}},
+      channelParams:{voice:{aht_seconds:APP.config.aht.voice,ibu_pct:APP.config.utilVoice??100},chat:{aht_seconds:APP.config.aht.chat,concurrency:APP.config.concurrency,utilization_pct:APP.config.utilChat??100},email:{aht_seconds:APP.config.aht.email,occupancy_pct:APP.config.emailOccupancy},blended:{voice_pct:APP.config.blendedVoicePct,chat_pct:APP.config.blendedChatPct,email_pct:APP.config.blendedEmailPct}}},
     holidays:APP.holidays},`holiday_plan_${new Date().toISOString().slice(0,10)}.json`);
 }
 function exportFinalPlan(){
