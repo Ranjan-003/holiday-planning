@@ -56,6 +56,7 @@
       "historicalData": {
         "Y1": {
           "year": 2021,
+          "holidayDate": "2021-12-25",
           "baselineVolume": { "voice": 8500, "chat": 3200, "email": 1800 },
           "actualVolume":   { "voice": 3600, "chat": 1100, "email": 620 },
           "anomalyFlag": true,
@@ -64,6 +65,7 @@
         },
         "Y2": {
           "year": 2022,
+          "holidayDate": "2022-12-25",
           "baselineVolume": { "voice": 9200, "chat": 3600, "email": 2000 },
           "actualVolume":   { "voice": 5100, "chat": 1850, "email": 940 },
           "anomalyFlag": false,
@@ -72,6 +74,7 @@
         },
         "Y3": {
           "year": 2023,
+          "holidayDate": "2023-12-25",
           "baselineVolume": { "voice": 9800, "chat": 3900, "email": 2200 },
           "actualVolume":   { "voice": 5600, "chat": 2050, "email": 1050 },
           "anomalyFlag": false,
@@ -102,6 +105,7 @@
       "historicalData": {
         "Y1": {
           "year": 2022,
+          "holidayDate": "2022-01-01",
           "baselineVolume": { "voice": 9200, "chat": 3600, "email": 2000 },
           "actualVolume":   { "voice": 4800, "chat": 2000, "email": 980 },
           "anomalyFlag": false,
@@ -110,6 +114,7 @@
         },
         "Y2": {
           "year": 2023,
+          "holidayDate": "2023-01-01",
           "baselineVolume": { "voice": 9800, "chat": 3900, "email": 2200 },
           "actualVolume":   { "voice": 5200, "chat": 2250, "email": 1100 },
           "anomalyFlag": false,
@@ -118,6 +123,7 @@
         },
         "Y3": {
           "year": 2024,
+          "holidayDate": "2024-01-01",
           "baselineVolume": { "voice": 10200, "chat": 4100, "email": 2400 },
           "actualVolume":   { "voice": 5500, "chat": 2400, "email": 1200 },
           "anomalyFlag": false,
@@ -149,6 +155,7 @@
       "historicalData": {
         "Y1": {
           "year": 2022,
+          "holidayDate": "2022-10-24",
           "baselineVolume": { "voice": 9800, "chat": 4200, "email": 2100, "blended": 16100 },
           "actualVolume":   { "voice": 13200, "chat": 5900, "email": 2900, "blended": 22000 },
           "anomalyFlag": false,
@@ -157,6 +164,7 @@
         },
         "Y2": {
           "year": 2023,
+          "holidayDate": "2023-11-12",
           "baselineVolume": { "voice": 10200, "chat": 4500, "email": 2200, "blended": 16900 },
           "actualVolume":   { "voice": 13800, "chat": 6200, "email": 3100, "blended": 23100 },
           "anomalyFlag": false,
@@ -165,6 +173,7 @@
         },
         "Y3": {
           "year": 2024,
+          "holidayDate": "2024-11-01",
           "baselineVolume": { "voice": 10800, "chat": 4800, "email": 2400, "blended": 18000 },
           "actualVolume":   { "voice": 14600, "chat": 6600, "email": 3400, "blended": 24600 },
           "anomalyFlag": false,

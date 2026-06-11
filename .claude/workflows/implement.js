@@ -87,15 +87,24 @@ inputs required, and success criteria. Flag any ambiguities before proceeding.`,
 log('Plan complete.')
 
 /* ════════════════════════════════════════════════════════════════
-   PHASES 2+3 — GENERATE → CRITIQUE LOOP (max 3 cycles)
+   PHASES 2+3 — GENERATE → CRITIQUE LOOP (max 2 cycles)
    Each cycle: generator implements, critic reviews.
-   On cycle 2+, generator receives previous critique to fix.
-   Loop exits early on Green. Matches "Three critique cycles"
-   documented in Readme.txt.
+   On cycle 2, generator receives the full cycle-1 critique and
+   MUST resolve every blocking item before returning.
+   Loop exits early on Green.
+
+   CRITIC SCORING RULES (enforced in prompt):
+   - Score GREEN when all WFM formulas are correct and no user-
+     facing information is false. Audit-trail gaps, dead CSS rules,
+     and minor comment inconsistencies do NOT block Green.
+   - Score AMBER only for: incorrect HC formula, false UI claim,
+     broken channel routing, or data-loss risk.
+   - Score RED only for: runtime crash, Infinity/NaN in output,
+     or a calculation that violates WFM domain rules.
 ════════════════════════════════════════════════════════════════ */
 let critique = null
 let genResult = ''
-const MAX_CYCLES = 3
+const MAX_CYCLES = 2
 
 for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
 
@@ -104,7 +113,7 @@ for (let cycle = 1; cycle <= MAX_CYCLES; cycle++) {
   log(`Invoking wfm-generator (cycle ${cycle} of ${MAX_CYCLES})...`)
 
   const prevCritiqueNote = critique
-    ? `\n\nPREVIOUS CRITIQUE (cycle ${cycle - 1}) — you MUST address these before building:\nScore: ${critique.score}\nSummary: ${critique.summary}\nQuestions to resolve:\n${critique.questions.map((q, i) => `  ${i + 1}. ${q}`).join('\n')}`
+    ? `\n\nPREVIOUS CRITIQUE (cycle ${cycle - 1}) — you MUST resolve ALL of these before finishing:\nScore: ${critique.score}\nSummary: ${critique.summary}\nItems to fix:\n${critique.questions.map((q, i) => `  ${i + 1}. ${q}`).join('\n')}\n\nIMPORTANT: This is cycle ${cycle} of ${MAX_CYCLES} — the final cycle. Fix every item above completely. Do not leave any item partially addressed.`
     : ''
 
   genResult = await agent(
@@ -118,7 +127,7 @@ Your task: implement every sub-task in the plan above.
 Read the relevant files at the PATH shown above before making any changes.
 Build everything completely — no stubs, no TODOs, no placeholders.
 All WFM domain rules in the project context are non-negotiable.
-When done, summarise what you built and which files changed.`,
+When done, produce a numbered list mapping each plan sub-task to exactly what changed and in which file.`,
     {
       agentType: 'wfm-generator',
       label: `wfm-generator-c${cycle}`,
@@ -144,10 +153,36 @@ ${plan}
 GENERATOR OUTPUT SUMMARY:
 ${genResult}
 
-Your task: read the project files at the PATH shown above and critique the changes
-that were just made. Cover at minimum 4 of your 6 critique dimensions.
-Return structured output matching the schema: score (Red/Amber/Green),
-questions (array of specific risks or issues), summary (one sentence).`,
+Your task: read the project files at the PATH shown above and critique ONLY the changes
+introduced by the generator above — do not raise pre-existing issues that are unrelated
+to this request.
+
+SIMULATE, DO NOT JUST READ — mandatory before you score:
+- For any inline event handler changed (onclick/oninput/onchange), reconstruct the EXACT
+  attribute string the browser receives after template interpolation. A double quote from
+  JSON.stringify inside a double-quoted onclick attribute BREAKS the handler — it will never
+  fire. If the handler would not fire, that is a BLOCKING Amber, not a passing change.
+- For any data-capture/display change, name the exact write path (with key casing, e.g.
+  h.years.Y1.actual.voice) and the exact read path, then check every gate/filter BETWEEN
+  them. If a value can be entered but will not appear where the user expects it, that is
+  BLOCKING even when each line is individually correct.
+- Verify the SPECIFIC bug each sub-task claims to fix is actually fixed: locate the line that
+  caused it and confirm the new code changes the runtime outcome. "Looks plausible" is not
+  verification.
+- Raise ONLY issues you can tie to a specific line AND a specific runtime symptom. Theoretical
+  what-ifs, dead CSS, comment style, and audit-trail gaps are NOT grounds for Amber. A review
+  with zero blocking issues is the expected outcome for a correct change — score it Green.
+
+SCORING RULES — apply strictly:
+- GREEN: All WFM formulas are correct. No user-facing text is false. No channel routing is broken.
+  Minor issues such as dead CSS rules, audit-trail gaps, comment-only inconsistencies, and
+  documentation style preferences do NOT block Green.
+- AMBER: Incorrect HC formula result, false user-facing claim, broken channel routing, or
+  data-loss risk introduced by this change.
+- RED: Runtime crash, Infinity/NaN in calculation output, or direct violation of WFM domain rules.
+
+Return structured output: score (Red/Amber/Green), questions (only blocking issues — omit
+non-blocking observations), summary (one sentence).`,
     {
       agentType: 'wfm-critic',
       label: `wfm-critic-c${cycle}`,
@@ -155,6 +190,13 @@ questions (array of specific risks or issues), summary (one sentence).`,
       schema: CRITIC_SCHEMA
     }
   )
+
+  /* Guard: agent may return null if session limit is hit */
+  if (!critique) {
+    log(`Cycle ${cycle} critic returned null (session limit or agent failure). Pipeline blocked.`)
+    critique = { score: 'Amber', summary: 'Critic agent did not complete — session limit hit. Re-run /implement.', questions: ['Critic agent was interrupted. Re-run /implement to retry.'] }
+    break
+  }
 
   log(`Cycle ${cycle} — Score: ${critique.score} — ${critique.summary}`)
 

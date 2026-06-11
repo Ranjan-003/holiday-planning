@@ -1864,7 +1864,7 @@ function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt
 /* ================================================================
    HOLIDAY MODEL
 ================================================================ */
-function _emptyYear(){return{year:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}};}
+function _emptyYear(){return{year:'',holidayDate:'',actual:{voice:0,chat:0,email:0,blended:0},baseline:{voice:0,chat:0,email:0,blended:0}};}
 function _emptyDVSlot(){return{voice:[null,null,null,null,null,null,null],chat:[null,null,null,null,null,null,null],email:[null,null,null,null,null,null,null]};}
 /* migrateDailyVolumes: converts any legacy flat-array dailyVolumes slot into the new
    per-channel object schema. Legacy format: slot = [n0..n6] (single blended total per day).
@@ -2035,6 +2035,10 @@ function renderHolidayList(resetPage){
           <div class="year-block__label">${getYearLabel(y)}</div>
           <input type="number" placeholder="Calendar year" value="${(h.years[y]||{}).year||''}"
             oninput="setHVal('${h.id}','years.${y}.year',this.value)">
+          <label style="font-size:10px;color:var(--text-tertiary);margin-top:var(--sp-2);display:block">Holiday date (this year)</label>
+          <input type="date" value="${(h.years[y]||{}).holidayDate||''}"
+            style="margin-bottom:var(--sp-2)"
+            onchange="setHVal('${h.id}','years.${y}.holidayDate',this.value);if(document.querySelector('.tab-panel:nth-child(2).active'))renderHistoricalAnalysis()">
           <label style="font-size:10px;color:var(--text-tertiary)">Actual volume</label>
           ${(()=>{
             // Show voice/chat/email inputs always; add blended input when holiday uses blended.
@@ -2047,7 +2051,7 @@ function renderHolidayList(resetPage){
                 oninput="setHActual('${h.id}','${y}','${ch}',+this.value)">
             </div>`).join('');
           })()}
-          <label style="font-size:10px;color:var(--text-tertiary);margin-top:var(--sp-2);display:block">Baseline volume <span style="color:var(--text-tertiary);font-weight:normal;font-size:9px">(optional — uses plan vol if blank)</span></label>
+          <label style="font-size:10px;color:var(--text-tertiary);margin-top:var(--sp-2);display:block">Baseline volume <span style="color:var(--text-tertiary);font-weight:normal;font-size:9px">(Normal-week BAU baseline — 6-8 week rolling avg before this holiday; leave blank if unknown)</span></label>
           ${(()=>{
             const _blChs=h.channels&&h.channels.includes('blended')?[...CHANNELS,'blended']:CHANNELS;
             return _blChs.map(ch=>`<div style="margin-bottom:4px">
@@ -2181,51 +2185,63 @@ function toggleChannel(hid,ch,checked){
 
 /* ================================================================
    ANOMALY DETECTION
-   Uses the first channel with baseline data across all active
-   channels, prioritising voice if present. For chat/email-only
-   holidays, the correct channel's data is used rather than
-   always defaulting to voice (which would read all-zeros).
+   v2.0 re-arch: flags on the YoY-change series rather than on the
+   BAU uplift series. YoY change = (act[y] - act[next-older]) / act[next-older].
+   Detection channel selection: prefer voice with actual data; else first active
+   channel with actual volume in at least two populated slots (YoY needs two points).
+   n=2 inactivity and manual override behaviour preserved from prior version.
 ================================================================ */
 function computeImpact(actual,baseline){if(!baseline||baseline===0)return null;return((actual-baseline)/baseline)*100;}
+
+/* _computeYoYSeries: builds an ordered array of {year, yoy} objects for channel ch.
+   Ordered from most recent (Y1) to oldest populated slot.
+   YoY = (act[y] - act[next-older]) / act[next-older] * 100.
+   The oldest populated slot has no prior year — it is the baseline and is excluded.
+   Returns [] when fewer than 2 populated slots exist. */
+function _computeYoYSeries(h,ch){
+  const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+  if(populated.length<2)return[];
+  const series=[];
+  for(let i=0;i<populated.length-1;i++){
+    const y=populated[i];
+    const yPrev=populated[i+1];
+    const act=h.years[y].actual[ch]||0;
+    const actPrev=h.years[yPrev].actual[ch]||0;
+    if(actPrev>0)series.push({year:y,yoy:((act-actPrev)/actPrev)*100});
+  }
+  return series;
+}
+
 function detectAnomalies(h){
-  // Determine which channel to use: prefer voice if it has data; else first active channel with baseline data
+  // Pick detection channel: prefer voice if it has ≥2 populated actual slots;
+  // else first active channel with ≥2 populated actual slots for YoY computation.
   const activeChannels=h.channels&&h.channels.length?h.channels:['voice'];
   let detectionChannel=null;
-  // Check voice first
   if(activeChannels.includes('voice')){
-    const hasVoiceBaseline=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].baseline.voice||0)>0);
-    if(hasVoiceBaseline)detectionChannel='voice';
+    const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.voice||0)>0);
+    if(populated.length>=2)detectionChannel='voice';
   }
-  // Fall back to first channel with any baseline data
   if(!detectionChannel){
     for(const ch of activeChannels){
-      const hasBaseline=YEAR_SLOTS.some(y=>h.years[y]?.year&&(h.years[y].baseline[ch]||0)>0);
-      if(hasBaseline){detectionChannel=ch;break;}
+      const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+      if(populated.length>=2){detectionChannel=ch;break;}
     }
   }
   if(!detectionChannel)return{};
-  const impacts=[];
-  YEAR_SLOTS.forEach(y=>{
-    if(h.years[y]?.year){
-      const base=h.years[y].baseline[detectionChannel]||0;
-      const act=h.years[y].actual[detectionChannel]||0;
-      if(base>0){const imp=computeImpact(act,base);if(imp!==null)impacts.push({year:y,impact:imp});}
-    }
-  });
-  if(impacts.length<2)return{};
-  const mean=impacts.reduce((a,b)=>a+b.impact,0)/impacts.length;
-  // Population standard deviation (divides by n, not n-1).
-  // With exactly 2 data points the population std = |Y1-Y2|/2. The maximum deviation
-  // of either point from the mean is |Y1-Y2|/2 = exactly 1 population std dev. Since
-  // the threshold is 2 std devs (default), neither point can ever be flagged when only
-  // 2 years are present — anomaly detection is effectively inactive at n=2.
-  // This is intentional: with only 2 years there is no statistical basis for outlier
-  // detection. At n>=3 the detection becomes meaningful. Users with only Y1/Y2 data
-  // should override anomaly flags manually on the Historical Analysis tab.
-  const std=Math.sqrt(impacts.reduce((a,b)=>a+Math.pow(b.impact-mean,2),0)/impacts.length);
+
+  // Build YoY series for the detection channel.
+  const yoySeries=_computeYoYSeries(h,detectionChannel);
+  // Need at least 3 YoY values for meaningful statistical detection.
+  // At n=2 (two YoY points), population std = |y1-y2|/2 and each point's max deviation
+  // from the mean = population std, so neither can exceed the 2-std threshold.
+  // Effectively inactive at n<3, matching the prior BAU-based implementation's n<2 guard.
+  if(yoySeries.length<3)return{};
+  const vals=yoySeries.map(s=>s.yoy);
+  const mean=vals.reduce((a,b)=>a+b,0)/vals.length;
+  const std=Math.sqrt(vals.reduce((a,b)=>a+Math.pow(b-mean,2),0)/vals.length);
   const threshold=APP.config.anomalyThreshold;
   const flags={};
-  impacts.forEach(({year,impact})=>{flags[year]=std>0&&Math.abs(impact-mean)>threshold*std;});
+  yoySeries.forEach(({year,yoy})=>{flags[year]=std>0&&Math.abs(yoy-mean)>threshold*std;});
   return flags;
 }
 
@@ -2244,6 +2260,12 @@ function setAnomalyOverride(hid,year,val){
 
 /* ================================================================
    TAB 2: HISTORICAL ANALYSIS
+   v2.0 re-arch: YoY holiday-vs-holiday change is the PRIMARY metric.
+   BAU uplift (actual vs normal-week baseline) is a SEPARATE section
+   that only renders when a baseline is present for that slot.
+   Anomaly flags derive from the YoY series (via detectAnomalies).
+   No plan-volume fallback anywhere in Tab 2 — planVolume appears only
+   in Tab 3 (Combinations) where it is the authoritative forecast baseline.
 ================================================================ */
 function renderHistoricalAnalysis(){
   const el=document.getElementById('historicalAnalysisContent');
@@ -2254,43 +2276,55 @@ function renderHistoricalAnalysis(){
       <div class="card__header"><div><div class="card__title">${escHtml(h.name)||'Unnamed'}</div>
       <div class="card__subtitle">${h.date||'No date'} &nbsp;·&nbsp; <span class="badge badge--${h.planSource==='WFM Forecast'?'blue':'purple'}">${h.planSource}</span></div></div></div>
       ${CHANNELS.filter(ch=>h.channels.includes(ch)).map(ch=>{
-        // Detect whether any year slots have year labels AND actual volume > 0 for this channel.
-        // Checking only h.years[y]?.year (label present) is insufficient: a slot where the user
-        // entered a year label but left actual volume at 0 passes the label check and renders a
-        // table row with act=0 and an impact% computed against planVolume. The actionable warning
-        // ('go back and fill in historical data') is never shown, and the table appears but conveys
-        // no useful information. Requiring actual[ch] > 0 ensures the table only renders rows that
-        // carry real volume data, and the warning branch fires correctly when no such rows exist.
-        const slotsWithYear=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
-        if(!slotsWithYear.length){
-          // No year data entered at all — surface a clear setup guide rather than a blank table.
-          // This is the most common new-user confusion: they enter planVolume on Tab 1 and click
-          // Continue without also filling in the historical year slots. Tabs 3-7 all depend on at
-          // least one year slot having both a year label and an actual volume.
+        // Only render rows where actual volume > 0 for this channel.
+        const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+        if(!populated.length){
           return`<div class="mb-4">
             <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
             <div class="alert alert--warning">
-              <small><strong>No historical year data entered for ${ch}.</strong> Go back to the Setup tab (Tab 1) and fill in the Historical data section for this holiday: enter the <em>calendar year</em> (e.g. ${getBaseYear()-1}) and <em>Actual volume</em> for at least one year slot (Y1 = most recent). Once year data is saved, this tab will show impact % and anomaly analysis. Plan volume entered here (${(h.planVolume[ch]||0).toLocaleString()}) is used as the forecast baseline on Tab 3 (Combinations) when no baseline is entered.</small>
+              <small><strong>No historical year data entered for ${ch}.</strong> Go back to the Setup tab (Tab 1) and fill in the Historical data section for this holiday: enter the <em>calendar year</em> (e.g. ${getBaseYear()-1}) and <em>Actual volume</em> for at least one year slot (Y1 = most recent). Once year data is saved, this tab will show YoY change and BAU uplift analysis.</small>
             </div>
           </div>`;
         }
-        return`<div class="mb-4"><div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
-        <div class="table-wrap"><table class="data-table">
-          <thead><tr><th>Year</th><th class="th--right">Actual</th><th class="th--right">Baseline</th><th class="th--right">Impact %</th><th class="th--center">Anomaly</th><th class="th--center">Override</th></tr></thead>
-          <tbody>${slotsWithYear.map(y=>{
-            const act=h.years[y].actual[ch]||0,base=h.years[y].baseline[ch]||0;
-            // When no baseline is entered, fall back to planVolume[ch] for impact% display —
-            // mirrors the generateCombinations() fallback so Tab 2 and Tab 3 show consistent numbers.
-            const planVolForFallback=h.planVolume[ch]||0;
-            const effectiveBase=base>0?base:(planVolForFallback>0?planVolForFallback:0);
-            const imp=computeImpact(act,effectiveBase);
+
+        // Build per-slot YoY change map from the series helper.
+        // yoyMap[y] = number (pct) | null (oldest slot = baseline year, or calculation impossible)
+        const yoySeries=_computeYoYSeries(h,ch);
+        const yoyMap={};
+        yoySeries.forEach(({year,yoy})=>{yoyMap[year]=yoy;});
+        // The oldest populated slot is the baseline year — no YoY possible.
+        const oldestSlot=populated[populated.length-1];
+
+        // ── PRIMARY TABLE: YoY holiday-vs-holiday change ──
+        const primaryTable=`<div class="table-wrap"><table class="data-table">
+          <thead><tr>
+            <th>Year</th>
+            <th class="th--right">Actual</th>
+            <th class="th--right">Prior-year actual</th>
+            <th class="th--right">YoY Change</th>
+            <th class="th--center">Anomaly</th>
+            <th class="th--center">Override</th>
+          </tr></thead>
+          <tbody>${populated.map(y=>{
+            const act=h.years[y].actual[ch]||0;
+            // Prior-year actual: the next older populated slot's actual (or null for oldest).
+            const idx=populated.indexOf(y);
+            const priorSlot=idx<populated.length-1?populated[idx+1]:null;
+            const priorAct=priorSlot?(h.years[priorSlot].actual[ch]||0):null;
+            const isBaseline=(y===oldestSlot);
+            const yoyVal=isBaseline?null:(yoyMap[y]!=null?yoyMap[y]:null);
             const isManual=h.manualAnomalyOverrides[y];
             const flagged=isManual!==undefined?isManual:(autoFlags[y]||false);
             return`<tr>
               <td><strong>${getYearLabel(y)}</strong> &nbsp;<span style="color:var(--text-tertiary);font-size:var(--text-xs)">(${h.years[y].year||getYearForSlot(y)})</span></td>
               <td class="td--right td--mono">${act.toLocaleString()}</td>
-              <td class="td--right td--mono">${base>0?base.toLocaleString():`<span style="color:var(--color-amber-600);font-size:var(--text-xs)">${planVolForFallback>0?planVolForFallback.toLocaleString()+' (plan vol)':'0 — enter baseline'}</span>`}</td>
-              <td class="td--right">${imp!==null?`<span class="impact-chip ${imp<0?'impact-chip--drop':imp>0?'impact-chip--spike':'impact-chip--flat'}">${imp>=0?'+':''}${imp.toFixed(1)}%${base<=0&&planVolForFallback>0?' *':''}</span>`:'<span class="text-faint">No data</span>'}</td>
+              <td class="td--right td--mono">${priorAct!=null?priorAct.toLocaleString():'<span style="color:var(--text-tertiary)">—</span>'}</td>
+              <td class="td--right">${isBaseline
+                ?`<span style="color:var(--text-tertiary);font-size:var(--text-xs)">— (baseline year)</span>`
+                :yoyVal!=null
+                  ?`<span class="impact-chip ${yoyVal<0?'impact-chip--drop':yoyVal>0?'impact-chip--spike':'impact-chip--flat'}">${yoyVal>=0?'+':''}${yoyVal.toFixed(1)}%</span>`
+                  :'<span class="text-faint">No data</span>'
+              }</td>
               <td class="td--center" id="anomaly_badge_${h.id}_${y}">${flagged?`<span class="anomaly-flag ${isManual!==undefined?'anomaly-flag--manual':'anomaly-flag--auto'}">${isManual!==undefined?'Manual':'Auto'}</span>`:'<span class="anomaly-flag anomaly-flag--clean">Clean</span>'}</td>
               <td class="td--center"><select style="height:28px;font-size:var(--text-xs);width:100px" onchange="setAnomalyOverride('${h.id}','${y}',this.value)">
                 <option value="auto" ${isManual===undefined?'selected':''}>Auto</option>
@@ -2299,11 +2333,55 @@ function renderHistoricalAnalysis(){
               </select></td>
             </tr>`;}).join('')}
           </tbody>
-        </table></div>
-        ${slotsWithYear.some(y=>!(h.years[y].baseline[ch]||0)&&(h.planVolume[ch]||0)>0&&(h.years[y].actual[ch]||0)>0)?
-          `<div class="alert alert--info mt-2" style="font-size:var(--text-xs)"><small>* Baseline not entered for one or more years — plan volume (${(h.planVolume[ch]||0).toLocaleString()}) is used as the comparison baseline. Impact % is relative to plan volume. Enter baseline volumes on the Setup tab to use historical baselines instead.</small></div>`:''
-        }
-      </div>`;}).join('')}
+        </table></div>`;
+
+        // ── BAU UPLIFT SECTION: only rendered when at least one slot has a baseline > 0 ──
+        // BAU uplift = (actual - normal-week-baseline) / normal-week-baseline.
+        // "Normal-week baseline" = h.years[y].baseline[ch] (the 6-8 week rolling avg entered
+        // on the Setup tab). If no slot for this channel has a baseline entered, the section
+        // is completely absent — no plan-volume fallback, no placeholder number.
+        const slotsWithBaseline=populated.filter(y=>(h.years[y].baseline[ch]||0)>0);
+        const bauSection=slotsWithBaseline.length===0?'':`
+          <div class="mt-4">
+            <div style="font-size:var(--text-xs);font-weight:var(--weight-semibold);text-transform:uppercase;letter-spacing:.06em;color:var(--text-secondary);margin-bottom:var(--sp-2)">
+              Uplift vs normal week (BAU)
+            </div>
+            <div class="table-wrap"><table class="data-table">
+              <thead><tr>
+                <th>Year</th>
+                <th class="th--right">Actual</th>
+                <th class="th--right">BAU baseline</th>
+                <th class="th--right">Uplift %</th>
+              </tr></thead>
+              <tbody>${populated.map(y=>{
+                const act=h.years[y].actual[ch]||0;
+                const base=h.years[y].baseline[ch]||0;
+                if(base<=0){
+                  return`<tr>
+                    <td><strong>${getYearLabel(y)}</strong></td>
+                    <td class="td--right td--mono">${act.toLocaleString()}</td>
+                    <td class="td--right"><span style="color:var(--text-tertiary);font-size:var(--text-xs)">—</span></td>
+                    <td class="td--right"><span style="color:var(--text-tertiary);font-size:var(--text-xs)">Enter a BAU baseline in Setup tab (6-8 week rolling average before this holiday)</span></td>
+                  </tr>`;
+                }
+                const uplift=computeImpact(act,base);
+                return`<tr>
+                  <td><strong>${getYearLabel(y)}</strong></td>
+                  <td class="td--right td--mono">${act.toLocaleString()}</td>
+                  <td class="td--right td--mono">${base.toLocaleString()}</td>
+                  <td class="td--right">${uplift!=null?`<span class="impact-chip ${uplift<0?'impact-chip--drop':uplift>0?'impact-chip--spike':'impact-chip--flat'}">${uplift>=0?'+':''}${uplift.toFixed(1)}%</span>`:'<span class="text-faint">No data</span>'}</td>
+                </tr>`;
+              }).join('')}
+              </tbody>
+            </table></div>
+          </div>`;
+
+        return`<div class="mb-4">
+          <div class="flex items-center gap-2 mb-3"><span class="badge badge--${ch}">${ch}</span></div>
+          ${primaryTable}
+          ${bauSection}
+        </div>`;
+      }).join('')}
     </div>`;
   }).join('');
 }
@@ -2324,27 +2402,43 @@ function getAllSubsets(arr){
   return result;
 }
 function generateCombinations(h,ch){
-  // Baseline fallback: when a year slot has no baseline entered, use planVolume[ch] as
-  // the baseline so that actuals-only input still produces combinations. This supports the
-  // common WFM planning scenario where only historical actuals are available — the plan
-  // volume represents the expected "normal" week and serves as an adequate comparison point.
-  // Impact% = (actual - planVolume) / planVolume when baseline is absent.
-  // WFM domain rule: HC and FTE remain distinct; this fallback only affects impact% calculation.
+  // Tab 3 Combinations uses YoY-change as the impact metric (consistent with the Tab 2
+  // re-arch). Impact% per slot = YoY change relative to the next-older populated slot.
+  // Oldest populated slot is the baseline and is excluded from the available set.
+  // planVolume is used only for forecasting the projected volume (planVol * (1 + meanYoY/100)).
+  // No silent planVolume fallback for impact% — if YoY cannot be computed the slot is excluded.
+  //
+  // WFM domain rule: HC and FTE remain distinct; this function computes volume only.
   const planVol=h.planVolume[ch]||0;
-  function _effectiveBaseline(y){
-    const b=h.years[y].baseline[ch]||0;
-    return b>0?b:planVol;
+
+  // Build the YoY map for this channel (same logic as _computeYoYSeries).
+  const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+  // yoyMap[y] = yoy pct for each slot except the oldest (baseline year).
+  const yoyMap={};
+  for(let i=0;i<populated.length-1;i++){
+    const y=populated[i];
+    const yPrev=populated[i+1];
+    const act=h.years[y].actual[ch]||0;
+    const actPrev=h.years[yPrev].actual[ch]||0;
+    if(actPrev>0)yoyMap[y]=((act-actPrev)/actPrev)*100;
   }
-  // Year slot is available when: year label entered, actual > 0, and an effective baseline > 0.
-  // planVol=0 with no entered baseline means _effectiveBaseline=0 → slot excluded (no division by zero).
-  const avail=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0&&_effectiveBaseline(y)>0);
+
+  // Available slots: those with a defined YoY value (excludes oldest baseline slot).
+  const avail=Object.keys(yoyMap).filter(y=>yoyMap[y]!=null);
+  if(!avail.length){
+    // Fewer than 2 populated slots — cannot compute YoY. Return empty.
+    return[];
+  }
   const aFlags={...h.autoAnomalyFlags,...h.manualAnomalyOverrides};
-  const impacts={};avail.forEach(y=>{impacts[y]=computeImpact(h.years[y].actual[ch]||0,_effectiveBaseline(y));});
+  const impacts={};avail.forEach(y=>{impacts[y]=yoyMap[y];});
   const combos=[];
   const mkCombo=(yl)=>{
-    const vi=yl.map(y=>impacts[y]).filter(v=>v!==null);if(!vi.length)return null;
+    const vi=yl.map(y=>impacts[y]).filter(v=>v!=null);if(!vi.length)return null;
     const blended=vi.reduce((a,b)=>a+b,0)/vi.length;
-    const forecasted=Math.round(planVol*(1+blended/100));
+    // Forecast: apply the mean YoY change to the plan volume.
+    // When planVol=0 (not yet entered), forecasted=0 — the row still renders
+    // with impact% so the analyst can evaluate combinations before entering planVol.
+    const forecasted=planVol>0?Math.round(planVol*(1+blended/100)):0;
     const hasAnomaly=yl.some(y=>aFlags[y]);
     const {score,breakdown}=scoreCombo(yl,vi,aFlags);
     const name=yl.length===1?getYearLabel(yl[0]):`Avg(${yl.map(getYearLabel).join('+')})`;
@@ -2538,10 +2632,10 @@ function renderCombinations(){
             <span class="t-caption">Plan: ${(h.planVolume[ch]||0).toLocaleString()} · ${h.planSource}</span></div>
           ${(()=>{if(!combos.length){
             // Diagnose why no combinations were produced so the user can take action.
-            const hasActuals=YEAR_SLOTS.some(y=>(h.years[y]?.actual?.[ch]||0)>0);
-            const hasPlanVol=(h.planVolume[ch]||0)>0;
-            if(!hasActuals)return'<div class="alert alert--warning"><small>No '+ch+' actual volumes entered — go to Setup (Tab 1) and enter Y1 Actual volume for at least one year slot.</small></div>';
-            if(!hasPlanVol)return'<div class="alert alert--warning"><small>No '+ch+' plan volume entered — go to Setup (Tab 1) and enter a Plan Volume for '+ch+'. Plan volume is used as the baseline when no historical baseline is provided.</small></div>';
+            // Combinations require at least 2 year slots with actual volume > 0 (to compute YoY).
+            const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+            if(!populated.length)return'<div class="alert alert--warning"><small>No '+ch+' actual volumes entered — go to Setup (Tab 1) and enter Actual volume for at least two year slots (Y1 = most recent). Combinations use YoY change between consecutive years.</small></div>';
+            if(populated.length<2)return'<div class="alert alert--warning"><small>Only one year of '+ch+' actuals entered — YoY combinations require at least two years. Add a second year slot on the Setup tab.</small></div>';
             return'<div class="alert alert--warning"><small>No valid combinations — check that the calendar year field is filled in for each year slot on the Setup tab.</small></div>';
           }return null;})()??`
           <div style="display:grid;grid-template-columns:180px 90px 130px 1fr 80px 60px;gap:var(--sp-3);padding:var(--sp-2) var(--sp-4);margin-bottom:var(--sp-1)">
@@ -2600,11 +2694,10 @@ function renderRecommendation(){
           const sel=combos.find(c=>c.combo===h.selectedCombos[ch])||combos[0];
           const rec=combos.find(c=>c.recommended)||combos[0];
           if(!sel){
-            // No combinations — diagnose for the user
-            const hasActuals=YEAR_SLOTS.some(y=>(h.years[y]?.actual?.[ch]||0)>0);
-            const hasPlanVol=(h.planVolume[ch]||0)>0;
-            if(!hasActuals)return`<div class="alert alert--warning"><small>No ${ch} actuals — go to Tab 1 Setup and enter Y1 Actual volume.</small></div>`;
-            if(!hasPlanVol)return`<div class="alert alert--warning"><small>No ${ch} plan volume — go to Tab 1 Setup and enter a Plan Volume for ${ch}.</small></div>`;
+            // No combinations — diagnose for the user. YoY combinations need ≥2 year slots with actuals.
+            const populated=YEAR_SLOTS.filter(y=>(h.years[y]?.actual?.[ch]||0)>0);
+            if(!populated.length)return`<div class="alert alert--warning"><small>No ${ch} actuals — go to Tab 1 Setup and enter Actual volume for at least two year slots.</small></div>`;
+            if(populated.length<2)return`<div class="alert alert--warning"><small>Only one year of ${ch} actuals entered — YoY combinations require at least two years. Add a second year slot on the Setup tab.</small></div>`;
             return`<div class="alert alert--warning"><small>No combinations for ${ch} — check historical data and year fields on Tab 1.</small></div>`;
           }
           return`<div>
@@ -2780,8 +2873,28 @@ function _syncForecastSectionVisibility(hid){
    WFM domain: this is a demand planning calculation. No shrinkage, no Erlang C, no HC
    computation. HC/FTE distinction is not applicable here. planVolume is weekly contact
    volume (not FTE or HC). */
+/* _parseDateCol: parse a 'yyyy-mm-dd' string to a 0-based DAYS column index (Sat=0..Fri=6).
+   DAYS = ['Sat','Sun','Mon','Tue','Wed','Thu','Fri']
+   Date.getDay() → 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat.
+   Mapping: getDay→col: 6→0(Sat), 0→1(Sun), 1→2(Mon), 2→3(Tue), 3→4(Wed), 4→5(Thu), 5→6(Fri).
+   Returns -1 on invalid input. Uses local-time constructor (year,month-1,day) to avoid UTC
+   timezone shifting the weekday — same pattern as holiday-day highlighting at line ~2702. */
+function _parseDateCol(dateStr){
+  if(!dateStr)return -1;
+  const parts=dateStr.split('-');
+  if(parts.length!==3)return -1;
+  const d=new Date(+parts[0],+parts[1]-1,+parts[2]);
+  if(isNaN(d.getTime()))return -1;
+  const dow=d.getDay(); // 0=Sun..6=Sat
+  // Map JS getDay() to DAYS array index (Sat=0,Sun=1,Mon=2,Tue=3,Wed=4,Thu=5,Fri=6)
+  return dow===6?0:dow+1;
+}
+
 function computeDayIndexForecast(h){
   const result={voice:null,chat:null,email:null};
+  // Parse the plan-year holiday column index once for all channels.
+  // c_t: 0-based column index (Sat=0..Fri=6) of the target holiday in the plan year.
+  const c_t=_parseDateCol(h.date);
   CHANNELS.forEach(ch=>{
     // Collect contributing year slots: must have at least one positive daily volume cell.
     // Normalisation is against each year's own weekly total, not planVolume, so the index
@@ -2797,8 +2910,16 @@ function computeDayIndexForecast(h){
     });
     if(!contributing.length){result[ch]=null;return;}
 
-    // For each contributing year, derive the 7-element day-index array (fracs summing to 1.0)
-    // then compute the weighted sum across years.
+    // For each contributing year, derive the 7-element day-index array (fracs summing to 1.0),
+    // apply holiday-relative cyclic rotation, then compute the weighted sum across years.
+    //
+    // ROTATION RATIONALE: The DAYS array is a Sat-anchored week column. If last year's Diwali
+    // fell on Wednesday (column 4) but this year's Diwali is on Tuesday (column 3), the
+    // Wednesday volume peak from last year should be shifted left by 1 column so it aligns
+    // with Tuesday in the projection. Rotation = (c_t - c_y + 7) % 7 positions cyclically.
+    // Wrap at week boundary is intentional for v1: a rotation that moves Saturday's volume to
+    // the prior Friday position is accepted because holidays rarely fall on consecutive
+    // day-of-week extremes, and the cyclic wrap keeps all 7 fractions summing to 1.0.
     const weightedIndex=new Array(7).fill(0);
     let totalWeight=0;
     contributing.forEach(y=>{
@@ -2808,9 +2929,27 @@ function computeDayIndexForecast(h){
       const arr=h.dailyVolumes[slotKey][ch];
       const weekTotal=arr.reduce((s,v)=>s+(v!=null?+v:0),0);
       if(weekTotal<=0)return; // guard: skip zero-total years (excluded by filter above, defensive)
+
+      // Build the normalised 7-element fraction array for this year+channel.
+      const fracs=arr.map(v=>(v!=null?+v:0)/weekTotal);
+
+      // Compute cyclic rotation shift: how many columns to rotate fracs to align
+      // this year's holiday column to the plan-year holiday column.
+      const c_y=_parseDateCol((h.years[y]||{}).holidayDate||'');
+      let shift=0;
+      if(c_t>=0&&c_y>=0){
+        shift=(c_t-c_y+7)%7;
+      } else {
+        // Missing or invalid date on one or both sides — no rotation applied.
+        // Log a console note so the analyst can diagnose the data gap.
+        if(c_y<0){console.info('[WFM day-shape] holidayDate absent or invalid for slot '+y+' ('+ch+') — using unrotated day-shape for this year.');}
+        shift=0;
+      }
+
+      // Apply cyclic rotation: element at position d maps to position (d+shift)%7.
+      // This shifts the pattern forward by `shift` columns within the Sat-Fri week.
       for(let d=0;d<7;d++){
-        const v=arr[d]!=null?+arr[d]:0;
-        weightedIndex[d]+=w*(v/weekTotal);
+        weightedIndex[(d+shift)%7]+=w*fracs[d];
       }
       totalWeight+=w;
     });
@@ -4203,6 +4342,17 @@ function migrateAppHolidays(){
       if(!h.years[y])h.years[y]=_emptyYear();
       if(typeof h.years[y].actual!=='object')h.years[y].actual={voice:0,chat:0,email:0,blended:0};
       if(typeof h.years[y].baseline!=='object')h.years[y].baseline={voice:0,chat:0,email:0,blended:0};
+      // Migration: add holidayDate field when absent (plans saved before this schema version).
+      // Derive a default from h.date by substituting the slot's calendar year into the
+      // plan holiday's month/day. Falls back to '' when h.date or year is missing/invalid.
+      if(typeof h.years[y].holidayDate!=='string'){
+        if(h.date&&h.years[y].year){
+          const parts=h.date.split('-');
+          const calYr=parseInt(h.years[y].year,10);
+          h.years[y].holidayDate=(parts.length===3&&!isNaN(calYr))
+            ?calYr+'-'+parts[1]+'-'+parts[2]:'';
+        } else h.years[y].holidayDate='';
+      }
     });
     // Ensure planVolume exists for all channels
     if(!h.planVolume||typeof h.planVolume!=='object'){
@@ -4594,6 +4744,20 @@ function loadFromJSON(d){
       if(src){YEAR_SLOTS.forEach(y=>{if(src[y]){const yd=src[y];
         if(!nh.years[y])nh.years[y]=_emptyYear();
         nh.years[y].year=yd.year||'';
+        // Restore holidayDate; if absent (old plan) derive a default from h.date by substituting
+        // the slot's calendar year into the plan holiday's month/day. This prevents a crash
+        // and gives a sensible starting point for day-shape rotation on old plans.
+        if(yd.holidayDate){
+          nh.years[y].holidayDate=yd.holidayDate;
+        } else if(h.date&&nh.years[y].year){
+          // Derive: take h.date's month/day, swap in the slot's calendar year.
+          const parts=h.date.split('-');
+          if(parts.length===3){
+            const calYr=parseInt(nh.years[y].year,10);
+            if(!isNaN(calYr))nh.years[y].holidayDate=calYr+'-'+parts[1]+'-'+parts[2];
+            else nh.years[y].holidayDate='';
+          } else nh.years[y].holidayDate='';
+        } else nh.years[y].holidayDate='';
         nh.years[y].actual=typeof yd.actualVolume==='object'?yd.actualVolume:(typeof yd.actual==='object'?yd.actual:{voice:yd.actualVolume||0,chat:0,email:0,blended:0});
         nh.years[y].baseline=typeof yd.baselineVolume==='object'?yd.baselineVolume:(typeof yd.baseline==='object'?yd.baseline:{voice:yd.baselineVolume||0,chat:0,email:0,blended:0});
         if(yd.anomalyFlag&&yd.anomalySource==='manual')nh.manualAnomalyOverrides[y]=true;
