@@ -737,6 +737,21 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
   <div style="position:relative;height:240px;margin-top:var(--sp-6)">
     <canvas id="hcChart" role="img" aria-label="Headcount by 30-minute interval"></canvas>
   </div>
+  <!-- Sub-task 2: full-week interval grid (all 7 days, Sat-first) -->
+  <div id="hcWeekGridContainer" class="card mt-6" style="display:none">
+    <div class="card__header">
+      <span class="card__title">Full-week interval grid — Gross HC per 30-min slot</span>
+      <span class="t-caption" id="hcWeekGridCaption" style="min-height:1em"></span>
+    </div>
+    <div class="table-wrap" style="max-height:480px;overflow-y:auto;overflow-x:auto">
+      <table class="wr-coverage-grid" id="hcWeekGridTable"></table>
+    </div>
+    <div class="flex gap-3 mt-3" style="font-size:var(--text-xs)">
+      <span style="background:var(--color-red-50);padding:2px 8px;border-radius:var(--radius-sm);color:var(--color-red-700)">Red = peak interval (highest Gross HC of that day)</span>
+      <span style="background:var(--color-primary-50);padding:2px 8px;border-radius:var(--radius-sm);color:var(--color-primary-700)">Blue = above-average</span>
+      <span style="color:var(--text-tertiary)">0 = outside operating window or zero volume</span>
+    </div>
+  </div>
   <div class="flex justify-end mt-6 gap-3">
     <button class="btn btn--secondary" onclick="switchTab(4)">← Back</button>
     <button class="btn btn--primary" onclick="switchTab(6)">Continue →</button>
@@ -800,6 +815,17 @@ button.ch-toggle:focus-visible,button.day-toggle:focus-visible{box-shadow:var(--
     <div class="card__header"><span class="card__title">Channels to optimise</span><span class="t-caption">Pool split equally across channels</span></div>
     <div class="ch-multiselect" id="srChannelPicker"></div>
     <div id="srBlendedChannelNote" class="alert alert--info mt-2" style="display:none"><small>One or more holidays use the <strong>Blended</strong> channel. Blended shift optimisation is not available in this tab — HC is computed via the blended formula but no Blended toggle is shown. To review blended staffing, use the HC &amp; Coverage tab (Tab 6) or export the final plan.</small></div>
+  </div>
+  <!-- Sub-task 5: Erlang C SL% per interval using rostered agents from Tab 7 -->
+  <div id="tab8SLGridContainer" class="card mb-6" style="display:none">
+    <div class="card__header">
+      <span class="card__title">Per-interval SL% — from Tab 7 rostered agents &times; IBU</span>
+      <span class="t-caption" id="tab8SLGridCaption"></span>
+    </div>
+    <div class="alert alert--info mb-3" style="font-size:var(--text-xs)">
+      <small>Effective agents per interval = (roster agents covering that interval from Tab 7) &times; IBU%. Erlang C formula: SL(N,&lambda;,&mu;,T) where N = effective agents, &lambda; = interval calls / 1800 (calls/sec), &mu; = 1 / AHT (sec), T = target answer time (sec). Voice and Blended use Erlang C. Chat uses concurrency model. Email is throughput — no per-interval SL applies.</small>
+    </div>
+    <div id="tab8SLGridContent"></div>
   </div>
   <div id="shiftRecommendationContent">
     <div class="empty-state"><div class="empty-state__icon">🗓️</div><div class="empty-state__title">Select a holiday, day and at least one channel</div></div>
@@ -1517,6 +1543,11 @@ let spSelectedChannels=new Set(['voice']);
 let srSelectedChannels=new Set(['voice']);
 // Week Roster (Tab 7) state
 let wrChannel='voice'; // currently selected single channel for week roster
+// APP.rosterGroups: shared editable roster state populated by Tab 7 roster engine.
+// Tab 8 reads this directly for per-interval SL% computation.
+// Structure: [{start, end, startMin, endMin, agents, pat, dayPattern, n}]
+// Reset to [] when a new roster is generated. User edits update agents/start/end in-place.
+APP.rosterGroups=[];
 // SURPLUS_THRESHOLD: scheduled > required * (1 + SURPLUS_THRESHOLD) triggers surplus coloring.
 // Default 0.20 = 20% above requirement. Exposed as a named constant, not a magic number.
 const WR_SURPLUS_THRESHOLD=0.20;
@@ -2238,6 +2269,13 @@ function invalidateAllCaches(){
   if(document.getElementById('tab6')&&document.getElementById('tab6').classList.contains('active')){
     if(!invalidateAllCaches._wrTimer){
       invalidateAllCaches._wrTimer=setTimeout(()=>{invalidateAllCaches._wrTimer=null;renderWeekRoster();},0);
+    }
+  }
+  // Re-render Tab 8 SL grid if Tab 8 (id="tab7") is currently active, because upstream
+  // parameters (AHT, IBU, shrinkage) affect the Erlang C SL% computation.
+  if(document.getElementById('tab7')&&document.getElementById('tab7').classList.contains('active')){
+    if(!invalidateAllCaches._t8slTimer){
+      invalidateAllCaches._t8slTimer=setTimeout(()=>{invalidateAllCaches._t8slTimer=null;renderTab8SLGrid();},0);
     }
   }
 }
@@ -4871,9 +4909,17 @@ function renderHCTab(){
   else if(_activeHasChat)_effectiveIBUPct=_ibuChatPct;
   const _shrinkFrac=(1-shrink/100);
   const _ibuFrac=_effectiveIBUPct/100;
-  const _showIBUCalc=_effectiveIBUPct<100&&peakNet>0;
+  const _showIBUCalc=peakNet>0;
+  // Sub-task 1: self-describing label with compound-shrinkage tooltip.
+  // Always show numeric formula when there is any peak to describe.
+  // Tooltip shows the full compound formula with user's entered components substituted in.
+  const _pl=APP.config.shrink?.pl??0;
+  const _ul=APP.config.shrink?.ul??0;
+  const _tr=APP.config.shrink?.tr??0;
+  const _shrinkTooltip=`1-(1-${(_pl/100).toFixed(2)})x(1-${(_ul/100).toFixed(2)})x(1-${(_tr/100).toFixed(2)}) = ${shrink.toFixed(2)}%`;
+  const _shrinkLabelSpan=`<span data-tooltip="${_shrinkTooltip}" style="cursor:help;border-bottom:1px dotted var(--color-amber-600);color:var(--color-amber-700)">${_shrinkFrac.toFixed(4)} (1 &minus; ${shrink.toFixed(2)}% compound shrinkage)</span>`;
   const _grossCaption=_showIBUCalc
-    ?`staff needed on the roster to cover that peak = raw ÷ ${_ibuFrac.toFixed(2)} ÷ ${_shrinkFrac.toFixed(2)} &nbsp;<span style="font-family:var(--font-mono);color:var(--color-primary-700)">= ${peakNet} ÷ ${_ibuFrac.toFixed(2)} ÷ ${_shrinkFrac.toFixed(2)}</span>`
+    ?`= ${peakNet} ÷ ${_ibuFrac.toFixed(2)} (IBU) ÷ ${_shrinkLabelSpan}`
     :`staff needed on the roster to cover that peak = raw ÷ IBU ÷ (1 − shrinkage)`;
   document.getElementById('hcSummaryMetrics').innerHTML=`
     <div class="metric-card metric-card--primary"><div class="metric-card__label">Weekly forecast (all channels)</div><div class="metric-card__value">${totalVol.toLocaleString()}</div></div>
@@ -4971,9 +5017,9 @@ function renderHCIntervals(){
     const dayName=days&&days[dayIdx]?days[dayIdx].day:(_hcPickerDays[dayIdx]?.day||'');
     dayLabelEl.textContent=dayName?`${dayName} – ${ch.charAt(0).toUpperCase()+ch.slice(1)}`:'';
   }
-  if(!days||!days[dayIdx]){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">No interval data</td></tr>';return;}
+  if(!days||!days[dayIdx]){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">No interval data</td></tr>';const _wg=document.getElementById('hcWeekGridContainer');if(_wg)_wg.style.display='none';return;}
   const ivs=days[dayIdx].intervals;
-  if(!ivs.length){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">Zero volume — no intervals</td></tr>';return;}
+  if(!ivs.length){document.getElementById('hcIntervalBody').innerHTML='<tr><td colspan="4" class="text-faint">Zero volume — no intervals</td></tr>';const _wg=document.getElementById('hcWeekGridContainer');if(_wg)_wg.style.display='none';return;}
   // Zero-volume indicator: all intervals have zero call rate for this day and channel.
   // Shown inline above the table so the user understands the data is present but empty.
   // This can occur when a channel is selected that the holiday does not use (e.g. Chat
@@ -5024,6 +5070,62 @@ function renderHCIntervals(){
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{autoSkip:true,maxTicksLimit:12}},y:{beginAtZero:true}}}
   });
+  // Sub-task 2: render full-week gross HC interval grid
+  _renderHCWeekGrid(hid,ch);
+}
+
+/* Sub-task 2: _renderHCWeekGrid — renders a full-week interval grid for the active panel channel.
+   Columns: Sat, Sun, Mon, Tue, Wed, Thu, Fri (DAYS order, Sat-first).
+   Rows: 30-min interval slots covering the operating window.
+   Each cell = Gross HC for that day/interval combination.
+   Cells at peak Gross HC for their day are colored red; above-average cells are blue.
+   Zero-volume intervals show 0 in muted text. */
+function _renderHCWeekGrid(hid,ch){
+  const gridContainer=document.getElementById('hcWeekGridContainer');
+  const gridTable=document.getElementById('hcWeekGridTable');
+  const gridCaption=document.getElementById('hcWeekGridCaption');
+  if(!gridContainer||!gridTable)return;
+  const h=APP.holidays.find(x=>x.id===hid);
+  if(!h){gridContainer.style.display='none';return;}
+  const{days}=buildDailyData(h,ch);
+  if(!days||!days.length){gridContainer.style.display='none';return;}
+  // Build interval template from first non-empty day
+  const ivTemplate=(days.find(d=>d.intervals&&d.intervals.length)||days[0])?.intervals||[];
+  if(!ivTemplate.length){gridContainer.style.display='none';return;}
+  // Align days to DAYS order (Sat-first). Build dayMap: DAYS[i] → intervals array
+  const dayMap=new Map(days.map(d=>[d.day,d.intervals]));
+  // Per-day peak grossHC (for red highlighting)
+  const dayPeaks=DAYS.map(dayName=>{
+    const ivs=dayMap.get(dayName)||[];
+    return ivs.length?Math.max(...ivs.map(iv=>iv.grossHC||0)):0;
+  });
+  // Per-day average grossHC (for blue highlighting — above average = above-average utilisation)
+  const dayAvgs=DAYS.map((dayName,di)=>{
+    const ivs=dayMap.get(dayName)||[];
+    if(!ivs.length)return 0;
+    const nonZero=ivs.filter(iv=>iv.grossHC>0);
+    return nonZero.length?nonZero.reduce((a,iv)=>a+iv.grossHC,0)/nonZero.length:0;
+  });
+  // Build table HTML
+  const channelLabel=ch.charAt(0).toUpperCase()+ch.slice(1);
+  if(gridCaption)gridCaption.textContent=`${channelLabel} — Gross HC (peak-interval) per 30-min slot across all 7 days`;
+  const thead=`<thead><tr><th>Interval</th>${DAYS.map(d=>`<th>${d}</th>`).join('')}</tr></thead>`;
+  const tbodyRows=ivTemplate.map((ivRef,ii)=>{
+    const timeLbl=ivRef.start+'–'+ivRef.end;
+    const cells=DAYS.map((dayName,di)=>{
+      const ivs=dayMap.get(dayName)||[];
+      const iv=ivs[ii];
+      const g=iv?iv.grossHC:0;
+      if(g<=0)return`<td class="wr-cell-zero">0</td>`;
+      const isPeak=dayPeaks[di]>0&&g===dayPeaks[di];
+      const isAboveAvg=!isPeak&&dayAvgs[di]>0&&g>dayAvgs[di];
+      const cellCls=isPeak?'wr-cell-short-red':isAboveAvg?'wr-cell-surplus':'';
+      return`<td class="${cellCls}" title="${dayName} ${timeLbl}: Gross HC ${g}">${g}</td>`;
+    }).join('');
+    return`<tr><td>${timeLbl}</td>${cells}</tr>`;
+  }).join('');
+  gridTable.innerHTML=thead+`<tbody>${tbodyRows}</tbody>`;
+  gridContainer.style.display='';
 }
 
 /* ================================================================
@@ -5432,6 +5534,9 @@ function renderShiftRecommendation(){
       </div>
     </div>`;
   }).join('');
+  // Sub-task 5: re-render the SL grid reactively whenever renderShiftRecommendation fires
+  // (covers holiday change, day change, channel change).
+  renderTab8SLGrid();
 }
 
 /* ================================================================
@@ -5855,12 +5960,33 @@ function renderWeekRoster(){
 
   const{shiftGroups,coverageGrid,summary}=roster;
 
+  // Sub-task 3: compute peak concurrent requirement (max grossHC across all days × intervals)
+  const _peakConcurrent=coverageGrid.reduce((mx,row)=>Math.max(mx,...row.dayReqs),0);
+
+  // Sub-task 4: populate APP.rosterGroups from freshly-computed shift groups (deep copy so edits don't mutate the roster engine result)
+  APP.rosterGroups=shiftGroups.map(sg=>({
+    n:sg.n,
+    start:sg.start,
+    end:sg.end,
+    startMin:sg.startMin,
+    endMin:sg.endMin,
+    agents:sg.agents,
+    pat:sg.pat.slice(),
+    dayPattern:sg.dayPattern
+  }));
+  // Notify Tab 8 if it is currently active so it recomputes SL% with fresh roster
+  _notifyTab8RosterChange();
+
   // Summary metrics
+  // Sub-task 3: totalAgents is the distinct weekly headcount (agents assigned to rotating shifts
+  // covering multiple days with days off). It is NOT a sum of daily peak HCs.
+  // Peak concurrent (per-interval) is shown alongside for transparency.
   const summaryClass=summary.coveragePct>=100?'success':summary.coveragePct>=80?'warning':'danger';
   const summaryHtml=`
     <div class="metrics-row mb-6">
       <div class="metric-card metric-card--${summaryClass}"><div class="metric-card__label">Coverage</div><div class="metric-card__value">${summary.coveragePct}%</div></div>
-      <div class="metric-card"><div class="metric-card__label">Total agents</div><div class="metric-card__value">${summary.totalAgents}</div></div>
+      <div class="metric-card metric-card--primary" data-tooltip="Distinct agents on the weekly roster across all shift groups. Each agent works 5 days with 2 days off per week; 7-day coverage requires more bodies than the per-interval peak alone."><div class="metric-card__label">Total distinct weekly agents (7-day, 5-day workweeks)</div><div class="metric-card__value">${summary.totalAgents}</div></div>
+      <div class="metric-card" data-tooltip="Highest Gross HC requirement across all days and all 30-min intervals. This is the concurrent on-floor requirement at the busiest interval."><div class="metric-card__label">Peak concurrent (per-interval)</div><div class="metric-card__value">${_peakConcurrent}</div></div>
       <div class="metric-card"><div class="metric-card__label">Total agent-hours</div><div class="metric-card__value">${summary.totalAgentHours.toLocaleString()}</div></div>
       <div class="metric-card ${summary.intervalsShort>0?'metric-card--danger':'metric-card--success'}"><div class="metric-card__label">Intervals short</div><div class="metric-card__value">${summary.intervalsShort}</div></div>
       <div class="metric-card"><div class="metric-card__label">Shift groups</div><div class="metric-card__value">${shiftGroups.length}</div></div>
@@ -5927,28 +6053,275 @@ function renderWeekRoster(){
       </div>
     </div>`:'';
 
-  // Section 3: Table B — Roster table
+  // Section 3: Table B — Editable Roster (Sub-task 4)
+  // User can edit agents, shift start/end, and days worked. Any change updates APP.rosterGroups
+  // and triggers Tab 8 to recompute SL% reactively.
   const rosterTableHtml=shiftGroups.length?`
-    <div class="card mb-6">
-      <div class="card__header"><span class="card__title">Table B — Roster</span><span class="t-caption">One row per shift group</span></div>
+    <div class="card mb-6" id="wrRosterEditCard">
+      <div class="card__header">
+        <span class="card__title">Table B — Editable Roster</span>
+        <span class="t-caption">Edit agents, shift times, or days worked. Changes propagate to Tab 8 SL% instantly. Days: Y=Sat S=Sun M=Mon T=Tue W=Wed R=Thu F=Fri, dash=off.</span>
+      </div>
       <div class="table-wrap">
-        <table class="data-table">
-          <thead><tr><th>Number of Agents</th><th>Shift</th><th>Days Worked</th></tr></thead>
-          <tbody>
-            ${shiftGroups.map(sg=>`<tr>
-              <td class="td--mono"><strong>${sg.agents}</strong></td>
-              <td class="td--mono">${sg.start}&ndash;${sg.end}</td>
-              <td class="td--mono" style="letter-spacing:.05em">${sg.dayPattern}</td>
+        <table class="data-table" id="wrRosterEditTable">
+          <thead><tr><th style="min-width:72px">Agents</th><th style="min-width:90px">Start</th><th style="min-width:90px">End</th><th style="min-width:110px">Days (7-char)</th><th style="width:40px"></th></tr></thead>
+          <tbody id="wrRosterEditBody">
+            ${APP.rosterGroups.map((sg,i)=>`<tr>
+              <td><input type="number" class="dvg-forecast-input" style="width:68px" min="0" value="${sg.agents}" oninput="wrRosterEditAgents(${i},+this.value)"></td>
+              <td><input type="time" class="dvg-forecast-input" style="width:88px" value="${sg.start}" onchange="wrRosterEditTime(${i},'start',this.value)"></td>
+              <td><input type="time" class="dvg-forecast-input" style="width:88px" value="${sg.end}" onchange="wrRosterEditTime(${i},'end',this.value)"></td>
+              <td><input type="text" class="dvg-forecast-input" style="width:108px;font-family:var(--font-mono);letter-spacing:.12em" maxlength="7" placeholder="YSM-WRF" value="${sg.dayPattern}" onchange="wrRosterEditDays(${i},this.value)"></td>
+              <td><button class="btn btn--danger btn--icon btn--sm" onclick="wrRosterDeleteRow(${i})" title="Remove shift group">&times;</button></td>
             </tr>`).join('')}
           </tbody>
           <tfoot>
-            <tr><td><strong>${summary.totalAgents}</strong></td><td colspan="2">Total agents</td></tr>
+            <tr>
+              <td><strong id="wrRosterTotalAgents">${summary.totalAgents}</strong></td>
+              <td colspan="3" style="font-size:var(--text-xs);color:var(--text-secondary)">Total distinct weekly agents (7-day coverage, 5-day workweeks)</td>
+              <td><button class="btn btn--secondary btn--sm" onclick="wrRosterAddRow()" title="Add shift group">+</button></td>
+            </tr>
           </tfoot>
         </table>
       </div>
     </div>`:'';
 
   outEl.innerHTML=summaryHtml+capWarnHtml+shiftLinesHtml+coverageGridHtml+rosterTableHtml;
+}
+
+/* Sub-task 4: Editable roster row handlers.
+   All mutate APP.rosterGroups in-place, update the footer total, then notify Tab 8. */
+function _wrRosterUpdateTotal(){
+  const el=document.getElementById('wrRosterTotalAgents');
+  if(el)el.textContent=APP.rosterGroups.reduce((a,sg)=>a+(+sg.agents||0),0);
+}
+function wrRosterEditAgents(i,val){
+  if(!APP.rosterGroups[i])return;
+  APP.rosterGroups[i].agents=Math.max(0,Math.round(val)||0);
+  _wrRosterUpdateTotal();
+  _notifyTab8RosterChange();
+}
+function wrRosterEditTime(i,field,val){
+  if(!APP.rosterGroups[i])return;
+  APP.rosterGroups[i][field]=val;
+  // Recompute startMin / endMin so Tab 8 interval overlap checks stay correct
+  APP.rosterGroups[i].startMin=toMinutes(APP.rosterGroups[i].start);
+  APP.rosterGroups[i].endMin=toMinutes(APP.rosterGroups[i].end);
+  _notifyTab8RosterChange();
+}
+function wrRosterEditDays(i,val){
+  if(!APP.rosterGroups[i])return;
+  // Normalise to 7-char uppercase string; non-day-letter characters become '-'
+  const norm=(val.toUpperCase()+'-------').slice(0,7);
+  const pat=norm.split('').map((c,j)=>WR_DAY_LETTERS[j]===c);
+  APP.rosterGroups[i].dayPattern=norm;
+  APP.rosterGroups[i].pat=pat;
+  _notifyTab8RosterChange();
+}
+function wrRosterDeleteRow(i){
+  APP.rosterGroups.splice(i,1);
+  // Re-number n field
+  APP.rosterGroups.forEach((sg,j)=>{sg.n=j+1;});
+  // Re-render editable table body
+  const tbody=document.getElementById('wrRosterEditBody');
+  if(tbody){
+    tbody.innerHTML=APP.rosterGroups.map((sg,j)=>`<tr>
+      <td><input type="number" class="dvg-forecast-input" style="width:68px" min="0" value="${sg.agents}" oninput="wrRosterEditAgents(${j},+this.value)"></td>
+      <td><input type="time" class="dvg-forecast-input" style="width:88px" value="${sg.start}" onchange="wrRosterEditTime(${j},'start',this.value)"></td>
+      <td><input type="time" class="dvg-forecast-input" style="width:88px" value="${sg.end}" onchange="wrRosterEditTime(${j},'end',this.value)"></td>
+      <td><input type="text" class="dvg-forecast-input" style="width:108px;font-family:var(--font-mono);letter-spacing:.12em" maxlength="7" placeholder="YSM-WRF" value="${sg.dayPattern}" onchange="wrRosterEditDays(${j},this.value)"></td>
+      <td><button class="btn btn--danger btn--icon btn--sm" onclick="wrRosterDeleteRow(${j})" title="Remove shift group">&times;</button></td>
+    </tr>`).join('');
+  }
+  _wrRosterUpdateTotal();
+  _notifyTab8RosterChange();
+}
+function wrRosterAddRow(){
+  const n=APP.rosterGroups.length+1;
+  APP.rosterGroups.push({n,start:'08:00',end:'17:00',startMin:480,endMin:1020,agents:1,pat:Array(7).fill(false),dayPattern:'-------'});
+  const tbody=document.getElementById('wrRosterEditBody');
+  if(tbody){
+    const i=APP.rosterGroups.length-1;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><input type="number" class="dvg-forecast-input" style="width:68px" min="0" value="1" oninput="wrRosterEditAgents(${i},+this.value)"></td>
+      <td><input type="time" class="dvg-forecast-input" style="width:88px" value="08:00" onchange="wrRosterEditTime(${i},'start',this.value)"></td>
+      <td><input type="time" class="dvg-forecast-input" style="width:88px" value="17:00" onchange="wrRosterEditTime(${i},'end',this.value)"></td>
+      <td><input type="text" class="dvg-forecast-input" style="width:108px;font-family:var(--font-mono);letter-spacing:.12em" maxlength="7" placeholder="YSM-WRF" value="-------" onchange="wrRosterEditDays(${i},this.value)"></td>
+      <td><button class="btn btn--danger btn--icon btn--sm" onclick="wrRosterDeleteRow(${i})" title="Remove shift group">&times;</button></td>`;
+    tbody.appendChild(tr);
+  }
+  _wrRosterUpdateTotal();
+  _notifyTab8RosterChange();
+}
+
+/* Sub-task 5: renderTab8SLGrid — per-interval Erlang C SL% grid using APP.rosterGroups.
+   Channel routing:
+     Voice / Blended-voice-share → Erlang C SL formula.
+     Chat → concurrency model (sessions per agent): SL% = min(1, rosterChatAgents * concurrency / chatCallsAtInterval).
+     Email → daily throughput batch channel: no per-interval SL applies.
+   Effective agents per interval = sum of roster agents whose shift covers that interval
+     on the active day (using intervalOverlapsShift) × IBU% for voice; × utilChat% for chat.
+   Volume per interval comes from buildDailyData (same source as Tab 6).
+   AHT, IBU, target answer time come from APP.config.
+*/
+function renderTab8SLGrid(){
+  const container=document.getElementById('tab8SLGridContainer');
+  const content=document.getElementById('tab8SLGridContent');
+  const caption=document.getElementById('tab8SLGridCaption');
+  if(!container||!content)return;
+
+  const hid=document.getElementById('srHolidaySelect')?.value;
+  const dayIdx=typeof srActiveDayIdx==='number'?srActiveDayIdx:0;
+  const h=hid&&APP.holidays.find(x=>x.id===hid);
+  if(!h||!APP.rosterGroups||!APP.rosterGroups.length){
+    container.style.display='none';
+    return;
+  }
+
+  const channels=[...srSelectedChannels];
+  if(!channels.length){container.style.display='none';return;}
+
+  const cfg=APP.config;
+  const ibuVoice=Math.max(0.30,Math.min(1.0,(cfg.utilVoice||100)/100));
+  const ibuChat=Math.max(0.30,Math.min(1.0,(cfg.utilChat||100)/100));
+  const ahtVoiceSec=Math.max(1,cfg.aht?.voice||360);
+  const ahtChatSec=Math.max(1,cfg.aht?.chat||480);
+  const slTargetSec=Math.max(1,cfg.sl?.voiceSec||20);
+  const slTargetPct=Math.max(0.01,Math.min(1,(cfg.sl?.voicePct||80)/100));
+  const concurrency=Math.max(1,cfg.concurrency||2.5);
+
+  let anyOutput=false;
+  const sections=channels.map(ch=>{
+    const{days}=buildDailyData(h,ch);
+    if(!days||!days[dayIdx])return`<div class="alert alert--warning mb-3" style="font-size:var(--text-xs)">No interval data for <strong>${ch}</strong> on this day. Ensure plan volumes are entered on the Setup tab.</div>`;
+
+    const ivs=days[dayIdx].intervals;
+    if(!ivs.length)return`<div class="alert alert--warning mb-3" style="font-size:var(--text-xs)">Zero volume — no intervals for <strong>${ch}</strong>.</div>`;
+
+    if(ch==='email'){
+      return`<div class="alert alert--info mb-3" style="font-size:var(--text-xs)"><span class="badge badge--email">email</span> &nbsp;Email uses the daily throughput model — no per-interval SL% applies. Review Net/Gross HC in Tab 6.</div>`;
+    }
+
+    anyOutput=true;
+    const dayLabel=days[dayIdx].day;
+
+    // Per-interval computation
+    let totalCallsWeighted=0;
+    let totalSLWeighted=0;
+    let hasNaN=false;
+    let hasCap=false;
+
+    const rows=ivs.map(iv=>{
+      const ivStartMin=toMinutes(iv.start);
+      const ivEndMin=toMinutes(iv.end);
+
+      // Count roster agents covering this interval on this day
+      // dayIdx here is the selected day in the SR tab; we need to map to DAYS[] index for pat
+      const dayName=days[dayIdx].day;
+      const patDayIdx=DAYS.indexOf(dayName); // 0=Sat...6=Fri
+
+      let rosterAgents=0;
+      APP.rosterGroups.forEach(sg=>{
+        if(patDayIdx>=0&&sg.pat&&sg.pat[patDayIdx]){
+          if(intervalOverlapsShift(ivStartMin,ivEndMin,sg.startMin,sg.endMin)){
+            rosterAgents+=sg.agents||0;
+          }
+        }
+      });
+
+      let slPct=null;
+      let note='';
+
+      if(ch==='voice'||ch==='blended'){
+        // Voice / blended-voice portion: Erlang C
+        const effectiveAgents=Math.floor(rosterAgents*(ch==='voice'?ibuVoice:(cfg.blendedVoicePct||50)/100*ibuVoice));
+        const callsThisInterval=ch==='blended'?(iv.callsPerHour*(cfg.blendedVoicePct||50)/100):iv.callsPerHour;
+        if(callsThisInterval<=0){slPct=1;note='No calls';}
+        else if(effectiveAgents<=0){slPct=0;note='No agents';}
+        else {
+          slPct=slAtAgents(effectiveAgents,callsThisInterval,ahtVoiceSec,slTargetSec);
+          if(isNaN(slPct)||!isFinite(slPct)){slPct=0;hasNaN=true;}
+          if(effectiveAgents>=2000)hasCap=true;
+        }
+        const slDisplay=typeof slPct==='number'?Math.round(slPct*100):0;
+        const slClass=slDisplay>=80?'sl-green':slDisplay>=60?'sl-amber':'sl-red';
+        totalCallsWeighted+=callsThisInterval;
+        totalSLWeighted+=callsThisInterval*(slDisplay/100);
+        return`<tr>
+          <td>${iv.start}–${iv.end}</td>
+          <td class="td--right td--mono">${Math.round(callsThisInterval)}</td>
+          <td class="td--right td--mono">${iv.grossHC}</td>
+          <td class="td--right td--mono">${effectiveAgents}</td>
+          <td class="td--right"><span class="sl-cell ${slClass}">${slDisplay}%${note?` (${note})`:''}</span></td>
+        </tr>`;
+      } else if(ch==='chat'){
+        // Chat: concurrency model. SL% = fraction of intervals where roster × IBU × concurrency >= chat demand
+        const effectiveChatAgents=Math.floor(rosterAgents*ibuChat);
+        const chatCapacity=effectiveChatAgents*concurrency; // concurrent sessions that can be handled
+        const chatDemand=iv.callsPerHour/2; // calls per 30-min interval (demand in session-equivalents)
+        if(chatDemand<=0){slPct=1;note='No chats';}
+        else if(chatCapacity<=0){slPct=0;note='No agents';}
+        else{slPct=Math.min(1,chatCapacity/chatDemand);}
+        if(isNaN(slPct)||!isFinite(slPct))slPct=0;
+        const slDisplay=Math.round(slPct*100);
+        const slClass=slDisplay>=80?'sl-green':slDisplay>=60?'sl-amber':'sl-red';
+        totalCallsWeighted+=chatDemand;
+        totalSLWeighted+=chatDemand*(slDisplay/100);
+        return`<tr>
+          <td>${iv.start}–${iv.end}</td>
+          <td class="td--right td--mono">${Math.round(chatDemand)}</td>
+          <td class="td--right td--mono">${iv.grossHC}</td>
+          <td class="td--right td--mono">${effectiveChatAgents}</td>
+          <td class="td--right"><span class="sl-cell ${slClass}">${slDisplay}%${note?` (${note})`:''}</span></td>
+        </tr>`;
+      }
+      return'';
+    }).join('');
+
+    const weightedDailySL=totalCallsWeighted>0?Math.round(100*totalSLWeighted/totalCallsWeighted):0;
+    const dailySLClass=weightedDailySL>=80?'sl-green':weightedDailySL>=60?'sl-amber':'sl-red';
+    const capWarnHtml=hasCap?`<div class="alert alert--warning mb-2" style="font-size:var(--text-xs)">One or more intervals hit the 2000-agent Erlang C cap — SL% may be understated at those intervals. Reduce volume or AHT on Setup.</div>`:'';
+    const nanWarnHtml=hasNaN?`<div class="alert alert--danger mb-2" style="font-size:var(--text-xs)">NaN/Infinity detected — one or more SL% values could not be computed. Check AHT and shrinkage inputs.</div>`:'';
+
+    return`<div class="mb-6">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="badge badge--${ch}">${ch.charAt(0).toUpperCase()+ch.slice(1)}</span>
+        <span class="t-caption">${h.name||''} — ${dayLabel}</span>
+        <span style="margin-left:auto;font-size:var(--text-xs)">Volume-weighted daily SL%:&nbsp;<span class="sl-cell ${dailySLClass}" style="min-width:60px">${weightedDailySL}%</span></span>
+      </div>
+      ${capWarnHtml}${nanWarnHtml}
+      <div class="table-wrap" style="max-height:380px;overflow-y:auto">
+        <table class="interval-table">
+          <thead><tr><th>Interval</th><th class="td--right">Calls/hr (vol)</th><th class="td--right">Gross HC req.</th><th class="td--right">Effective agents (roster&times;IBU)</th><th class="td--right">SL% (Erlang C)</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+    </div>`;
+  }).join('');
+
+  if(!anyOutput&&channels.every(ch=>ch==='email')){
+    container.style.display='none';
+    return;
+  }
+
+  if(caption){
+    const ibuPct=Math.round(ibuVoice*100);
+    caption.textContent=`Voice IBU ${ibuPct}% · AHT ${(ahtVoiceSec/60).toFixed(1)} min · Target ${slTargetSec}s`;
+  }
+  content.innerHTML=sections;
+  container.style.display='';
+}
+
+/* _notifyTab8RosterChange: if Tab 8 is currently visible, re-render it reactively.
+   Uses a short debounce to avoid re-rendering on every keypress during agent count edits. */
+let _tab8RosterDebounce=null;
+function _notifyTab8RosterChange(){
+  clearTimeout(_tab8RosterDebounce);
+  _tab8RosterDebounce=setTimeout(()=>{
+    if(document.getElementById('tab7')&&document.getElementById('tab7').classList.contains('active')){
+      renderTab8SLGrid();
+    }
+  },150);
 }
 
 /* ================================================================
@@ -6093,7 +6466,7 @@ function switchTab(idx){
   if(idx===4)renderDailyBreakdown();
   if(idx===5){populateHCSelects();updateShrinkage();renderHCTab();}
   if(idx===6){populateWRSelects();}
-  if(idx===7){populateSRSelects();}
+  if(idx===7){populateSRSelects();renderTab8SLGrid();}
 }
 
 /* ================================================================
@@ -6598,7 +6971,7 @@ function downloadJSON(obj,fn){
 
 function resetAll(){
   if(!confirm('Reset all data and start a new plan?'))return;
-  APP.holidays=[];APP.detectedBaseYear=null;APP.detectedQueues=[];hcCache={};shiftEntries=[];
+  APP.holidays=[];APP.detectedBaseYear=null;APP.detectedQueues=[];APP.rosterGroups=[];hcCache={};shiftEntries=[];
   spSelectedChannels=new Set(['voice']);srSelectedChannels=new Set(['voice']);spActivePanelCh='voice';
   hcSelectedChannels=new Set(['voice']);hcActivePanelCh='voice';
   spActiveDayIdx=0;srActiveDayIdx=0;hcDrillActiveDayIdx=0;queueConfirmed=false;
@@ -6633,6 +7006,10 @@ function resetAll(){
   const spDp=document.getElementById('spDayPicker');if(spDp)spDp.innerHTML='';
   const srDp=document.getElementById('srDayPicker');if(srDp)srDp.innerHTML='';
   const hcDp=document.getElementById('hcDayPicker');if(hcDp)hcDp.innerHTML='';
+  // Hide Tab 8 SL grid on reset
+  const _t8slg=document.getElementById('tab8SLGridContainer');if(_t8slg)_t8slg.style.display='none';
+  // Hide Tab 6 week grid on reset
+  const _t6wg=document.getElementById('hcWeekGridContainer');if(_t6wg)_t6wg.style.display='none';
   renderHolidayList();renderShiftRows();switchTab(0);
 }
 
